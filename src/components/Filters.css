@@ -1,0 +1,207 @@
+.filters-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.filters-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.filters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.filters-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: bold;
+  color: #000;
+}
+
+.filters-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filters-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.filter-section {
+  margin-bottom: 24px;
+}
+
+.filter-label {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #000;
+  margin-bottom: 12px;
+}
+
+.filter-age-range {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-age-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-age-input label {
+  font-size: 14px;
+  color: #666;
+}
+
+.filter-age-input input[type="range"] {
+  width: 100%;
+}
+
+.filter-distance {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-distance label {
+  font-size: 14px;
+  color: #666;
+}
+
+.filter-distance input[type="range"] {
+  width: 100%;
+}
+
+.filter-interests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-interest-tag {
+  padding: 8px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 20px;
+  background: #fff;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-interest-tag:hover {
+  border-color: #FF6B9D;
+  color: #FF6B9D;
+}
+
+.filter-interest-tag.active {
+  background: #FF6B9D;
+  border-color: #FF6B9D;
+  color: #fff;
+}
+
+.filters-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.filters-reset,
+.filters-apply {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.filters-reset {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.filters-reset:hover {
+  background: #e0e0e0;
+}
+
+.filters-apply {
+  background: #FF6B9D;
+  color: #fff;
+}
+
+.filters-apply:hover {
+  background: #ff5a8a;
+}
+
+.filter-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.filter-checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #FF6B9D;
+}
+
+.filter-checkbox span {
+  font-size: 16px;
+  color: #333;
+  user-select: none;
+}
+
+.filter-checkbox:hover span {
+  color: #FF6B9D;
+}
+
+.filter-kink-tag {
+  background: #f9f9f9;
+}

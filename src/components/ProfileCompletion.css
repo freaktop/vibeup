@@ -1,0 +1,48 @@
+.profile-completion {
+  background: linear-gradient(135deg, #FF6B9D 0%, #ff8fb3 100%);
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  color: #fff;
+}
+
+.completion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.completion-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.completion-percentage {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.completion-bar {
+  height: 8px;
+  background: rgba(255,255,255,0.3);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.completion-fill {
+  height: 100%;
+  background: #fff;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.completion-missing {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.missing-label {
+  font-weight: 500;
+}

@@ -1,0 +1,235 @@
+.profile-detail-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.profile-detail-modal {
+  background: #1a1a1a;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.profile-detail-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.profile-detail-close:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.profile-detail-photos {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3/4;
+  overflow: hidden;
+  border-radius: 16px 16px 0 0;
+}
+
+.profile-detail-main-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-detail-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.profile-detail-nav:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.profile-detail-nav-left {
+  left: 16px;
+}
+
+.profile-detail-nav-right {
+  right: 16px;
+}
+
+.profile-detail-photo-indicator {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-detail-content {
+  padding: 24px;
+}
+
+.profile-detail-header {
+  margin-bottom: 24px;
+}
+
+.profile-detail-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.profile-detail-distance {
+  font-size: 16px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.profile-detail-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #ff4444 0%, #ff6b6b 100%);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.profile-detail-verified {
+  display: inline-block;
+  margin-top: 8px;
+  background: #4caf50;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.profile-detail-section {
+  margin-bottom: 24px;
+}
+
+.profile-detail-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #FF6B9D;
+  margin-bottom: 12px;
+}
+
+.profile-detail-section p {
+  font-size: 16px;
+  color: #ccc;
+  line-height: 1.6;
+}
+
+.profile-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-detail-tag {
+  background: #2a2a2a;
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid #333;
+}
+
+.profile-detail-kink {
+  background: #3a2a2a;
+  border-color: #FF6B9D;
+}
+
+.profile-detail-vibe {
+  background: #24313a;
+  border-color: #4a90e2;
+}
+
+.profile-detail-vibe-alt {
+  background: #3a2a3a;
+  border-color: #FF6B9D;
+}
+
+.profile-detail-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #333;
+}
+
+.profile-detail-action-btn {
+  flex: 1;
+  background: #2a2a2a;
+  color: #fff;
+  border: 2px solid #333;
+  padding: 14px 24px;
+  border-radius: 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.profile-detail-action-btn:hover {
+  background: #3a3a3a;
+  border-color: #FF6B9D;
+}
+
+.profile-detail-action-btn.liked {
+  background: #FF6B9D;
+  border-color: #FF6B9D;
+  color: #fff;
+}
+
+.profile-detail-action-btn.message-btn:hover {
+  background: #4CAF50;
+  border-color: #4CAF50;
+}
