@@ -3,6 +3,15 @@
   min-height: 100%;
 }
 
+.profile-demo-banner {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 12px 16px;
+  font-size: 14px;
+  text-align: center;
+  border-bottom: 1px solid #fcd34d;
+}
+
 .profile-header {
   display: flex;
   flex-direction: column;
@@ -112,6 +121,13 @@
 
 .profile-section {
   margin-bottom: 24px;
+}
+
+.profile-hint {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
 }
 
 .profile-label {

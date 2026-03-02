@@ -15,10 +15,12 @@ import { useToast } from '../hooks/useToast';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
-import { createReport, listenMySwipes, listenProfiles, removeSwipe, setSwipe, type SwipeType } from '../firestore';
+import { getCurrentUid } from '../auth';
+import { createReport, listenMySwipes, listenProfiles, recordProfileView, removeSwipe, setSwipe, unmatch, type SwipeType } from '../firestore';
+import { enrichProfilesWithDistance } from '../utils/geolocation';
 import './Discover.css';
 
-type DiscoveryMode = 'nearme' | 'rightnow' | 'dating' | 'goingout';
+type IntentFilter = 'hookup' | 'date' | 'goingout';
 type ViewMode = 'grid' | 'card';
 
 export default function Discover() {
@@ -38,7 +40,7 @@ export default function Discover() {
   const [lastSwipe, setLastSwipe] = useState<{ type: string; profileId: string } | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid'); // DEFAULT TO GRID
-  const [discoveryMode, setDiscoveryMode] = useState<DiscoveryMode>('nearme');
+  const [intentFilter, setIntentFilter] = useState<IntentFilter>('hookup');
   const [selectedProfileForCard, setSelectedProfileForCard] = useState<Profile | null>(null);
   const [selectedProfileForDetail, setSelectedProfileForDetail] = useState<Profile | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -62,6 +64,10 @@ export default function Discover() {
     lookingFor: [],
     sexualOrientation: [],
     genderIdentity: [],
+    vibeType: [],
+    outTonightOnly: false,
+    verifiedOnly: false,
+    bodyType: [],
   });
 
   useEffect(() => {
@@ -78,6 +84,10 @@ export default function Discover() {
       lookingFor: savedFilters?.lookingFor || [],
       sexualOrientation: savedFilters?.sexualOrientation || [],
       genderIdentity: savedFilters?.genderIdentity || [],
+      vibeType: savedFilters?.vibeType || [],
+      outTonightOnly: savedFilters?.outTonightOnly || false,
+      verifiedOnly: savedFilters?.verifiedOnly || false,
+      bodyType: savedFilters?.bodyType || [],
     };
     setFilters(defaultFilters);
     storage.saveFilters(defaultFilters);
@@ -98,13 +108,13 @@ export default function Discover() {
       }
 
       unsubProfiles = listenProfiles((p) => {
-        setProfiles(p);
-        setIsLoading(false);
-        if (p.length === 0) {
-          // If Firestore read is blocked, listenProfiles falls back to []
-          // Show a helpful error so the UI doesn't look "stuck"
-          setError((prev) => prev || 'Unable to load profiles. Check Firestore rules / network.');
-        }
+        enrichProfilesWithDistance(p).then((enriched) => {
+          setProfiles(enriched);
+          setIsLoading(false);
+          if (p.length === 0) {
+            setError((prev) => prev || 'Unable to load profiles. Check Firestore rules / network.');
+          }
+        });
       });
 
       unsubSwipes = listenMySwipes(user.uid, (swipes) => {
@@ -144,7 +154,7 @@ export default function Discover() {
     if (profiles.length > 0) {
       applyFilters();
     }
-  }, [profiles, filters, passedProfiles, discoveryMode]);
+  }, [profiles, filters, passedProfiles, blockedProfiles, intentFilter]);
 
   useEffect(() => {
     if (viewMode === 'card' && profilesToShowRef.current.length > 0 && currentIndex >= profilesToShowRef.current.length) {
@@ -163,32 +173,23 @@ export default function Discover() {
       !passedProfiles.includes(profile.id) && !blockedProfiles.includes(profile.id)
     );
 
-    // Apply discovery mode filters
-    switch (discoveryMode) {
-      case 'rightnow':
-        filtered = filtered.filter(profile => profile.hookUpNow === true);
-        break;
-      case 'dating':
-        filtered = filtered.filter(profile => 
-          profile.lookingFor && (
-            profile.lookingFor.includes('Dates') || 
-            profile.lookingFor.includes('Relationship')
-          )
-        );
-        break;
-      case 'goingout':
-        filtered = filtered.filter(profile => 
-          profile.lookingFor && (
-            profile.lookingFor.includes('Friends') ||
-            profile.tags?.some(tag => ['Music', 'Dancing', 'Art', 'Comedy'].includes(tag))
-          )
-        );
-        break;
-      case 'nearme':
-      default:
-        // Show all profiles near me
-        break;
-    }
+    // Intent filter: Hookup | Date | Going Out (prioritize matching, fallback to all)
+    const intentFiltered = (() => {
+      switch (intentFilter) {
+        case 'hookup':
+          const hookup = filtered.filter(p => p.hookUpNow || (p.lookingFor && p.lookingFor.some(lf => ['Hookups', 'Fun'].includes(lf))));
+          return hookup.length > 0 ? hookup : filtered;
+        case 'date':
+          const date = filtered.filter(p => p.lookingFor && (p.lookingFor.includes('Dates') || p.lookingFor.includes('Relationship')));
+          return date.length > 0 ? date : filtered;
+        case 'goingout':
+          const out = filtered.filter(p => p.goingOutTonight || (p.lookingFor && p.lookingFor.some(lf => ['Friends', 'Clubbing'].includes(lf))) || p.tonightLookingFor === 'Going Out' || p.tonightLookingFor === 'Clubbing');
+          return out.length > 0 ? out : filtered;
+        default:
+          return filtered;
+      }
+    })();
+    filtered = intentFiltered;
 
     // Age filter
     if (filters.minAge !== undefined && filters.maxAge !== undefined) {
@@ -232,6 +233,46 @@ export default function Discover() {
       );
     }
 
+    // Vibe type filter
+    if (filters.vibeType && filters.vibeType.length > 0) {
+      filtered = filtered.filter(profile =>
+        profile.vibeType && filters.vibeType!.includes(profile.vibeType)
+      );
+    }
+
+    // Out tonight only
+    if (filters.outTonightOnly) {
+      filtered = filtered.filter(profile => profile.goingOutTonight === true);
+    }
+
+    // Verified only
+    if (filters.verifiedOnly) {
+      filtered = filtered.filter(profile => profile.verified === true);
+    }
+
+    // Body type filter
+    if (filters.bodyType && filters.bodyType.length > 0) {
+      filtered = filtered.filter(profile =>
+        profile.bodyType && filters.bodyType!.includes(profile.bodyType)
+      );
+    }
+
+    // Smart sort: online first, going out boosted, premium boosted
+    filtered.sort((a, b) => {
+      let scoreA = 0, scoreB = 0;
+      if (a.online) scoreA += 100;
+      if (b.online) scoreB += 100;
+      if (a.goingOutTonight) scoreA += 50;
+      if (b.goingOutTonight) scoreB += 50;
+      if (a.verified) scoreA += 20;
+      if (b.verified) scoreB += 20;
+      const distA = a.distance ?? 999;
+      const distB = b.distance ?? 999;
+      scoreA -= distA;
+      scoreB -= distB;
+      return scoreB - scoreA;
+    });
+
     setFilteredProfiles(filtered);
     if (currentIndex >= filtered.length) {
       setCurrentIndex(0);
@@ -250,7 +291,7 @@ export default function Discover() {
   };
 
   const handleLike = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     const res = await setSwipe(uid, profileId, 'like');
@@ -278,7 +319,7 @@ export default function Discover() {
       return;
     }
 
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     const res = await setSwipe(uid, profileId, 'superlike');
@@ -315,7 +356,7 @@ export default function Discover() {
 
     const lastSwipe = storage.removeLastSwipe();
     if (lastSwipe) {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) return;
       removeSwipe(uid, lastSwipe.profileId).catch(() => null);
 
@@ -333,7 +374,7 @@ export default function Discover() {
   };
 
   const handlePass = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
     await setSwipe(uid, profileId, 'pass');
     storage.addSwipeToHistory({ type: 'pass', profileId });
@@ -371,19 +412,25 @@ export default function Discover() {
 
   const handleProfileClick = (profile: Profile) => {
     if (viewMode === 'grid') {
-      // In grid view, clicking shows detail modal
+      recordProfileView(profile.id).catch(() => {});
       setSelectedProfileForDetail(profile);
     }
   };
 
   const handleSave = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
     const isSaved = savedProfiles.includes(profileId);
-    if (isSaved) {
-      await removeSwipe(uid, profileId);
-    } else {
-      await setSwipe(uid, profileId, 'save');
+    try {
+      if (isSaved) {
+        await removeSwipe(uid, profileId);
+        showToast('Removed from saved.', 'success');
+      } else {
+        await setSwipe(uid, profileId, 'save');
+        showToast('Profile saved!', 'success');
+      }
+    } catch {
+      showToast('Failed to save. Try again.', 'error');
     }
   };
 
@@ -432,7 +479,7 @@ export default function Discover() {
     }
 
     if (selected === 'Block') {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (uid) {
         setSwipe(uid, targetProfileId, 'block').catch(() => null);
       }
@@ -441,7 +488,12 @@ export default function Discover() {
     }
 
     if (selected === 'Unmatch') {
-      storage.unmatchProfile(targetProfileId);
+      const uid = getCurrentUid();
+      if (uid) {
+        unmatch(uid, targetProfileId).catch(() => {
+          showToast('Failed to unmatch. Try again.', 'error');
+        });
+      }
       setLikedProfiles(prev => prev.filter(id => id !== targetProfileId));
       setSuperLikedProfiles(prev => prev.filter(id => id !== targetProfileId));
       setSavedProfiles(prev => prev.filter(id => id !== targetProfileId));
@@ -458,11 +510,12 @@ export default function Discover() {
 
     if (selected === 'Save') {
       handleSave(targetProfileId);
-      showToast('Saved status updated.', 'success');
     }
   };
 
   const handleSwipeUp = () => {
+    const profile = profilesToShow[currentIndex];
+    if (profile) recordProfileView(profile.id).catch(() => {});
     setShowInfo(true);
   };
 
@@ -511,6 +564,10 @@ export default function Discover() {
       lookingFor: [],
       sexualOrientation: [],
       genderIdentity: [],
+      vibeType: [],
+      outTonightOnly: false,
+      verifiedOnly: false,
+      bodyType: [],
     };
     setFilters(defaultFilters);
     storage.saveFilters(defaultFilters);
@@ -678,39 +735,29 @@ export default function Discover() {
         )}
         {/* Header */}
         <div className="discover-header-text">
-          <h1 className="discover-title">Who's out near you — right now</h1>
-          <p className="discover-helper-text">Profiles update in real time based on activity and location.</p>
+          <h1 className="discover-title">Hook up. Date. Go out.</h1>
+          <p className="discover-helper-text">All in one vibe. Real-time, proximity-based.</p>
         </div>
 
-        {/* Sub-tabs for discovery modes */}
+        {/* Intent filter */}
         <div className="discover-subtabs">
           <button
-            className={`discover-subtab ${discoveryMode === 'nearme' ? 'active' : ''}`}
-            onClick={() => setDiscoveryMode('nearme')}
-            title="Near Me (Active) - See profiles nearby who are currently active"
+            className={`discover-subtab ${intentFilter === 'hookup' ? 'active' : ''}`}
+            onClick={() => setIntentFilter('hookup')}
           >
-            📍 Near Me (Active)
+            Hookup
           </button>
           <button
-            className={`discover-subtab ${discoveryMode === 'rightnow' ? 'active' : ''}`}
-            onClick={() => setDiscoveryMode('rightnow')}
-            title="Right Now (Live) - Profiles available right now, looking to meet up"
+            className={`discover-subtab ${intentFilter === 'date' ? 'active' : ''}`}
+            onClick={() => setIntentFilter('date')}
           >
-            🔥 Right Now (Live)
+            Date
           </button>
           <button
-            className={`discover-subtab ${discoveryMode === 'dating' ? 'active' : ''}`}
-            onClick={() => setDiscoveryMode('dating')}
-            title="Dating Intent - Profiles looking for dates and relationships"
+            className={`discover-subtab ${intentFilter === 'goingout' ? 'active' : ''}`}
+            onClick={() => setIntentFilter('goingout')}
           >
-            💕 Dating Intent
-          </button>
-          <button
-            className={`discover-subtab ${discoveryMode === 'goingout' ? 'active' : ''}`}
-            onClick={() => setDiscoveryMode('goingout')}
-            title="Going Out Tonight - Profiles looking to go out, socialize, or hang out"
-          >
-            🎉 Going Out Tonight
+            Going Out Tonight
           </button>
         </div>
 
@@ -750,8 +797,17 @@ export default function Discover() {
             >
               <div className="grid-item-image-container">
                 <img src={profile.photo} alt={profile.name} className="grid-item-image" />
-                {profile.hookUpNow && (
+                {profile.online && (
+                  <div className="grid-item-online" title="Online now">●</div>
+                )}
+                {profile.goingOutTonight && (
+                  <div className="grid-item-badge">🌙</div>
+                )}
+                {profile.hookUpNow && !profile.goingOutTonight && (
                   <div className="grid-item-badge">🔥</div>
+                )}
+                {profile.verified && (
+                  <div className="grid-item-verified" title="Verified">✓</div>
                 )}
                 {likedProfiles.includes(profile.id) && (
                   <div className="grid-item-liked">✓</div>
@@ -760,11 +816,11 @@ export default function Discover() {
               <div className="grid-item-info">
                 <div className="grid-item-name">{profile.name}, {profile.age}</div>
                 <div className="grid-item-distance">{profile.distance !== undefined ? `${profile.distance} mi` : 'Nearby'}</div>
-                {profile.lookingFor && profile.lookingFor.length > 0 && (
+                {(profile.vibeType || profile.lookingFor?.length) ? (
                   <div className="grid-item-tags">
-                    {profile.lookingFor.slice(0, 2).join(' • ')}
+                    {profile.vibeType || profile.lookingFor?.slice(0, 2).join(' • ')}
                   </div>
-                )}
+                ) : null}
               </div>
               <div className="grid-item-actions">
                 <button
@@ -787,6 +843,20 @@ export default function Discover() {
                   disabled={!likedProfiles.includes(profile.id)}
                 >
                   💬
+                </button>
+                <button
+                  className="grid-action-btn invite-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (likedProfiles.includes(profile.id)) {
+                      window.dispatchEvent(new CustomEvent('openChat', { detail: { profileId: profile.id } }));
+                    } else {
+                      showToast('Like first to invite out', 'info');
+                    }
+                  }}
+                  title="Invite Out"
+                >
+                  🎉
                 </button>
               </div>
             </div>

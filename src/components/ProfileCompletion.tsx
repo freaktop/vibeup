@@ -21,7 +21,7 @@ export default function ProfileCompletion() {
     if (!profile) return 0;
 
     let completed = 0;
-    const total = 11;
+    const total = 12;
 
     if (profile.name && profile.name !== 'You') completed++;
     if (profile.age) completed++;
@@ -34,6 +34,7 @@ export default function ProfileCompletion() {
     if (profile.intent) completed++;
     if (profile.vibeStyle) completed++;
     if (profile.photoRulesAccepted) completed++;
+    if (profile.currentCity && profile.currentCity.trim() !== '') completed++;
 
     return Math.round((completed / total) * 100);
   };
@@ -57,6 +58,7 @@ export default function ProfileCompletion() {
     if (!profile?.intent) missing.push('Intent');
     if (!profile?.vibeStyle) missing.push('Vibe');
     if (!profile?.photoRulesAccepted) missing.push('Photo Rules');
+    if (!profile?.currentCity || profile.currentCity.trim() === '') missing.push('Location');
     return missing;
   };
 

@@ -19,14 +19,15 @@ import {
   where,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { auth, db } from './firebase';
-import type { ChatMessage, Comment, Event, Location, Notification, Post, Profile, Report, UserProfile } from './types';
+import { db } from './firebase';
+import { getCurrentUid, getCurrentUser, isDemoMode } from './auth';
+import type { ChatMessage, Comment, Community, Event, Location, Notification, Post, Profile, Report, UserProfile } from './types';
 import { mockProfiles } from './data/mockProfiles';
 
 export type SwipeType = 'like' | 'pass' | 'superlike' | 'block' | 'save';
 
 export function requireUid(): string {
-  const uid = auth.currentUser?.uid;
+  const uid = getCurrentUid();
   if (!uid) {
     throw new Error('Not authenticated');
   }
@@ -38,10 +39,12 @@ export function matchIdFor(a: string, b: string): string {
 }
 
 export async function upsertMyProfile(userProfile: UserProfile | null | undefined): Promise<void> {
+  if (isDemoMode()) return; // Skip Firestore in demo mode
   const uid = requireUid();
 
-  const displayName = auth.currentUser?.displayName || userProfile?.name || 'New User';
-  const photo = auth.currentUser?.photoURL || userProfile?.photos?.[0] || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop';
+  const currentUser = getCurrentUser();
+  const displayName = currentUser?.displayName || userProfile?.name || 'New User';
+  const photo = currentUser?.photoURL || userProfile?.photos?.[0] || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop';
 
   const age = (() => {
     const n = Number.parseInt(userProfile?.age || '', 10);
@@ -57,11 +60,12 @@ export async function upsertMyProfile(userProfile: UserProfile | null | undefine
       age,
       distance: 0,
       photo,
-      photos: userProfile?.photos || (auth.currentUser?.photoURL ? [auth.currentUser.photoURL] : []),
+      photos: userProfile?.photos || (currentUser?.photoURL ? [currentUser.photoURL] : []),
       tags,
       bio: userProfile?.bio || '',
       sexualOrientation: userProfile?.sexualOrientation || null,
       lookingFor: userProfile?.lookingFor || [],
+      into: userProfile?.into || [],
       hookUpNow: userProfile?.hookUpNow || false,
       pronouns: userProfile?.pronouns || null,
       genderIdentity: userProfile?.genderIdentity || null,
@@ -72,6 +76,20 @@ export async function upsertMyProfile(userProfile: UserProfile | null | undefine
       photoBlurEnabled: userProfile?.photoBlurEnabled || false,
       anonymous: userProfile?.anonymous || false,
       safeMode: userProfile?.safeMode || false,
+      vibeType: userProfile?.vibeType || null,
+      tonightLookingFor: userProfile?.tonightLookingFor || null,
+      height: userProfile?.height || null,
+      bodyType: userProfile?.bodyType || null,
+      role: userProfile?.role || null,
+      instagram: userProfile?.instagram || null,
+      goingOutTonight: userProfile?.goingOutTonight || false,
+      visibleOnMap: userProfile?.visibleOnMap || false,
+      ghostMode: userProfile?.ghostMode || false,
+      currentCity: userProfile?.currentCity || null,
+      isProfileHidden: userProfile?.isProfileHidden || false,
+      nsfwEnabled: userProfile?.nsfwEnabled || false,
+      photoRulesAccepted: userProfile?.photoRulesAccepted || false,
+      allowBlurredBody: userProfile?.allowBlurredBody ?? true,
       updatedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
     },
@@ -80,7 +98,7 @@ export async function upsertMyProfile(userProfile: UserProfile | null | undefine
 }
 
 export async function seedMockProfilesIfEmpty(): Promise<{ seeded: boolean; count: number }> {
-  // Only seed when authenticated so rules can be `request.auth != null`
+  if (isDemoMode()) return { seeded: false, count: 0 };
   requireUid();
 
   const existing = await getDocs(query(collection(db, 'profiles'), limit(1)));
@@ -124,7 +142,12 @@ export async function seedMockProfilesIfEmpty(): Promise<{ seeded: boolean; coun
 }
 
 export function listenProfiles(onChange: (profiles: Profile[]) => void): Unsubscribe {
-  const uid = auth.currentUser?.uid;
+  if (isDemoMode()) {
+    const mock = mockProfiles.map((p) => ({ ...p, id: p.id })) as Profile[];
+    onChange(mock);
+    return () => {};
+  }
+  const uid = getCurrentUid();
   const q = query(collection(db, 'profiles'), limit(200));
   return onSnapshot(
     q,
@@ -171,6 +194,23 @@ export function listenMySwipes(
   );
 }
 
+/** Listen to blocked profile IDs (persisted in Firestore as swipes with type 'block') */
+export function listenBlockedIds(uid: string, onChange: (ids: string[]) => void): Unsubscribe {
+  if (isDemoMode()) {
+    onChange([]);
+    return () => {};
+  }
+  const q = query(
+    collection(db, 'users', uid, 'swipes'),
+    where('type', '==', 'block'),
+  );
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => d.id)),
+    () => onChange([]),
+  );
+}
+
 export async function setSwipe(uid: string, targetId: string, type: SwipeType): Promise<{ matchCreated: boolean }> {
   const ref = doc(db, 'users', uid, 'swipes', targetId);
   await setDoc(
@@ -185,6 +225,17 @@ export async function setSwipe(uid: string, targetId: string, type: SwipeType): 
 
   if (type === 'like' || type === 'superlike') {
     const matchCreated = await ensureMatchIfMutual(uid, targetId);
+    if (!matchCreated) {
+      const myProfile = await getProfile(uid);
+      const myName = myProfile?.name || 'Someone';
+      addNotification({
+        uid: targetId,
+        type: 'like',
+        title: type === 'superlike' ? 'Super like!' : 'New like',
+        body: `${myName} ${type === 'superlike' ? 'super liked' : 'liked'} you`,
+        profileId: uid,
+      }).catch(() => {});
+    }
     return { matchCreated };
   }
 
@@ -194,6 +245,17 @@ export async function setSwipe(uid: string, targetId: string, type: SwipeType): 
 export async function removeSwipe(uid: string, targetId: string): Promise<void> {
   const ref = doc(db, 'users', uid, 'swipes', targetId);
   await deleteDoc(ref);
+}
+
+/** Remove match and our swipe so neither user sees the match anymore */
+export async function unmatch(uid: string, targetId: string): Promise<void> {
+  const matchId = matchIdFor(uid, targetId);
+  const matchRef = doc(db, 'matches', matchId);
+  const matchSnap = await getDoc(matchRef);
+  if (matchSnap.exists()) {
+    await deleteDoc(matchRef);
+  }
+  await removeSwipe(uid, targetId);
 }
 
 export async function ensureMatchIfMutual(uid: string, targetId: string): Promise<boolean> {
@@ -215,6 +277,29 @@ export async function ensureMatchIfMutual(uid: string, targetId: string): Promis
     lastMessage: null,
     lastMessageAt: null,
   });
+
+  // Notify both users about the new match
+  const [myProfile, theirProfile] = await Promise.all([getProfile(uid), getProfile(targetId)]);
+  const myName = myProfile?.name || 'Someone';
+  const theirName = theirProfile?.name || 'Someone';
+  await Promise.all([
+    addNotification({
+      uid: targetId,
+      type: 'match',
+      title: "It's a match!",
+      body: `You and ${myName} liked each other. Say hi!`,
+      profileId: uid,
+      actionUrl: `match:${matchId}`,
+    }),
+    addNotification({
+      uid,
+      type: 'match',
+      title: "It's a match!",
+      body: `You and ${theirName} liked each other. Say hi!`,
+      profileId: targetId,
+      actionUrl: `match:${matchId}`,
+    }),
+  ]);
 
   return true;
 }
@@ -311,6 +396,11 @@ export async function sendChatMessage(params: {
 }): Promise<void> {
   const { matchId, senderId, text, imageUrl, voiceNoteUrl, messageType } = params;
 
+  const matchRef = doc(db, 'matches', matchId);
+  const matchSnap = await getDoc(matchRef);
+  const users = (matchSnap.data() as any)?.users as string[] | undefined;
+  const recipientId = users?.find((u) => u !== senderId);
+
   const msgRef = collection(db, 'matches', matchId, 'messages');
   await addDoc(msgRef, {
     senderId,
@@ -323,11 +413,24 @@ export async function sendChatMessage(params: {
     timestamp: serverTimestamp(),
   });
 
-  const matchRef = doc(db, 'matches', matchId);
+  const preview = text ?? (messageType === 'image' ? '📷 Photo' : messageType === 'voice' ? '🎤 Voice note' : '');
   await updateDoc(matchRef, {
-    lastMessage: text ?? (messageType === 'image' ? 'Image' : messageType === 'voice' ? 'Voice note' : ''),
+    lastMessage: preview,
     lastMessageAt: serverTimestamp(),
   });
+
+  if (recipientId) {
+    const senderProfile = await getProfile(senderId);
+    const senderName = senderProfile?.name || 'Someone';
+    addNotification({
+      uid: recipientId,
+      type: 'message',
+      title: senderName,
+      body: preview || 'Sent a message',
+      profileId: senderId,
+      actionUrl: `match:${matchId}`,
+    }).catch(() => {});
+  }
 }
 
 export async function listMySwipes(uid: string): Promise<Record<string, SwipeType>> {
@@ -384,16 +487,18 @@ export async function createWallPost(input: {
   tags: string[];
   type: Post['type'];
 }): Promise<void> {
+  if (isDemoMode()) return;
   const uid = requireUid();
   const profile = await getProfile(uid);
+  const currentUser = getCurrentUser();
 
   await addDoc(collection(db, 'posts'), {
     authorId: uid,
-    authorName: profile?.name || auth.currentUser?.displayName || 'You',
+    authorName: profile?.name || currentUser?.displayName || 'You',
     authorPhoto:
       profile?.photo ||
       profile?.photos?.[0] ||
-      auth.currentUser?.photoURL ||
+      currentUser?.photoURL ||
       'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
     content: input.content,
     image: input.image || null,
@@ -421,10 +526,24 @@ export async function toggleWallPostLike(postId: string, userId: string, isLiked
 
 export async function addWallPostComment(postId: string, comment: Comment): Promise<void> {
   const ref = doc(db, 'posts', postId);
+  const postSnap = await getDoc(ref);
+  const postAuthorId = (postSnap.data() as any)?.authorId;
+
   await updateDoc(ref, {
     comments: arrayUnion(comment),
     updatedAt: serverTimestamp(),
   });
+
+  if (postAuthorId && postAuthorId !== comment.authorId) {
+    addNotification({
+      uid: postAuthorId,
+      type: 'comment',
+      title: 'New comment',
+      body: `${comment.authorName} commented on your post`,
+      profileId: comment.authorId,
+      postId,
+    }).catch(() => {});
+  }
 }
 
 export function listenLocations(onChange: (locations: Location[]) => void): Unsubscribe {
@@ -492,16 +611,18 @@ export function listenEvents(onChange: (events: Event[]) => void): Unsubscribe {
 }
 
 export async function createEvent(event: Event): Promise<void> {
+  if (isDemoMode()) return;
   const uid = requireUid();
   const profile = await getProfile(uid);
 
+  const currentUser = getCurrentUser();
   await setDoc(
     doc(db, 'events', event.id),
     {
       ...event,
       organizerId: uid,
-      organizerName: profile?.name || auth.currentUser?.displayName || event.organizerName,
-      organizerPhoto: profile?.photo || profile?.photos?.[0] || auth.currentUser?.photoURL || event.organizerPhoto,
+      organizerName: profile?.name || currentUser?.displayName || event.organizerName,
+      organizerPhoto: profile?.photo || profile?.photos?.[0] || currentUser?.photoURL || event.organizerPhoto,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },
@@ -515,6 +636,9 @@ export async function setEventRsvp(eventId: string, userId: string, status: 'goi
   if (!snap.exists()) return;
 
   const data = snap.data() as any;
+  const organizerId = data.organizerId;
+  const eventTitle = data.title || 'Your event';
+
   const going = (Array.isArray(data.rsvps?.going) ? data.rsvps.going : []).filter((id: string) => id !== userId);
   const interested = (Array.isArray(data.rsvps?.interested) ? data.rsvps.interested : []).filter((id: string) => id !== userId);
   const notGoing = (Array.isArray(data.rsvps?.notGoing) ? data.rsvps.notGoing : []).filter((id: string) => id !== userId);
@@ -531,7 +655,27 @@ export async function setEventRsvp(eventId: string, userId: string, status: 'goi
     },
     updatedAt: serverTimestamp(),
   });
+
+  if (organizerId && organizerId !== userId && status === 'going') {
+    const userProfile = await getProfile(userId);
+    const userName = userProfile?.name || 'Someone';
+    addNotification({
+      uid: organizerId,
+      type: 'rsvp',
+      title: 'New RSVP',
+      body: `${userName} is going to ${eventTitle}`,
+      profileId: userId,
+      eventId,
+    }).catch(() => {});
+  }
 }
+
+const SEED_COMMUNITIES: Omit<Community, 'id'>[] = [
+  { name: 'Pride & Joy', description: 'A safe space for LGBTQ+ individuals to connect and share', photo: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=300&fit=crop', memberCount: 0, isExclusive: false, tags: ['LGBTQ+', 'Community', 'Support'], nsfw: false },
+  { name: 'Kink & Fetish', description: 'Open discussion about kinks, fetishes, and BDSM', photo: 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&h=300&fit=crop', memberCount: 0, isExclusive: true, tags: ['Kink', 'BDSM', 'Fetish'], nsfw: true },
+  { name: 'Bear Community', description: 'For bears, cubs, and admirers', photo: 'https://images.unsplash.com/photo-1478147427282-58a87a120781?w=400&h=300&fit=crop', memberCount: 0, isExclusive: false, tags: ['Bears', 'Community'], nsfw: false },
+  { name: 'Leather & Denim', description: 'Exclusive community for leather and denim enthusiasts', photo: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop', memberCount: 0, isExclusive: true, tags: ['Leather', 'Denim', 'Exclusive'], nsfw: true },
+];
 
 export interface Room {
   id: string;
@@ -799,7 +943,8 @@ export async function createReport(input: {
   reason?: string;
   details?: string;
 }): Promise<void> {
-  const uid = auth.currentUser?.uid || 'anonymous';
+  if (isDemoMode()) return;
+  const uid = getCurrentUid() || 'anonymous';
   await addDoc(collection(db, 'reports'), {
     type: input.type,
     targetId: input.targetId || null,
@@ -885,6 +1030,84 @@ export async function markNotificationRead(uid: string, notificationId: string):
   });
 }
 
+export async function seedCommunitiesIfEmpty(): Promise<{ seeded: boolean; count: number }> {
+  if (isDemoMode()) return { seeded: false, count: 0 };
+  const existing = await getDocs(query(collection(db, 'communities'), limit(1)));
+  if (!existing.empty) return { seeded: false, count: 0 };
+  const batch = writeBatch(db);
+  for (let i = 0; i < SEED_COMMUNITIES.length; i++) {
+    const c = SEED_COMMUNITIES[i];
+    const ref = doc(db, 'communities', `seed_${i + 1}`);
+    batch.set(ref, {
+      name: c.name,
+      description: c.description,
+      photo: c.photo,
+      isExclusive: c.isExclusive,
+      tags: c.tags,
+      nsfw: c.nsfw,
+      members: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+  await batch.commit();
+  return { seeded: true, count: SEED_COMMUNITIES.length };
+}
+
+export function listenCommunities(onChange: (communities: Community[]) => void): Unsubscribe {
+  if (isDemoMode()) {
+    onChange(SEED_COMMUNITIES.map((c, i) => ({ ...c, id: `seed_${i + 1}`, memberCount: 0 })));
+    return () => {};
+  }
+  const q = query(collection(db, 'communities'), orderBy('createdAt', 'asc'), limit(100));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const communities: Community[] = snap.docs.map((d) => {
+        const data = d.data() as any;
+        const members = Array.isArray(data.members) ? data.members : [];
+        return {
+          id: d.id,
+          name: data.name || 'Community',
+          description: data.description || '',
+          photo: data.photo || '',
+          memberCount: members.length,
+          isExclusive: !!data.isExclusive,
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          nsfw: !!data.nsfw,
+        };
+      });
+      onChange(communities);
+    },
+    () => onChange([]),
+  );
+}
+
+export async function joinCommunity(communityId: string, uid: string): Promise<void> {
+  if (isDemoMode()) return;
+  const ref = doc(db, 'communities', communityId);
+  await updateDoc(ref, { members: arrayUnion(uid), updatedAt: serverTimestamp() });
+}
+
+export async function leaveCommunity(communityId: string, uid: string): Promise<void> {
+  if (isDemoMode()) return;
+  const ref = doc(db, 'communities', communityId);
+  await updateDoc(ref, { members: arrayRemove(uid), updatedAt: serverTimestamp() });
+}
+
+export function listenMyCommunityIds(uid: string, onChange: (ids: string[]) => void): Unsubscribe {
+  if (isDemoMode()) {
+    onChange([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'communities'), where('members', 'array-contains', uid), limit(100));
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => d.id)),
+    () => onChange([]),
+  );
+}
+
 export async function markAllNotificationsRead(uid: string): Promise<void> {
   const snap = await getDocs(collection(db, 'users', uid, 'notifications'));
   const batch = writeBatch(db);
@@ -898,4 +1121,56 @@ export async function markAllNotificationsRead(uid: string): Promise<void> {
     }
   });
   await batch.commit();
+}
+
+// Profile views (Who Viewed You)
+export async function recordProfileView(viewedProfileId: string): Promise<void> {
+  if (isDemoMode()) return;
+  const viewerId = requireUid();
+  if (viewerId === viewedProfileId) return;
+
+  const viewerProfile = await getProfile(viewerId);
+  const currentUser = getCurrentUser();
+  const id = `${viewerId}_${viewedProfileId}_${Date.now()}`;
+  await setDoc(doc(db, 'profileViews', id), {
+    viewerId,
+    viewerName: viewerProfile?.name || currentUser?.displayName || 'Someone',
+    viewerPhoto: viewerProfile?.photo || viewerProfile?.photos?.[0] || currentUser?.photoURL || '',
+    profileId: viewedProfileId,
+    viewedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+export function listenProfileViewers(
+  profileId: string,
+  onChange: (viewers: { profileId: string; profileName: string; profilePhoto: string; viewedAt: number }[]) => void,
+): Unsubscribe {
+  if (isDemoMode()) {
+    onChange([]);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, 'profileViews'),
+    where('profileId', '==', profileId),
+    orderBy('viewedAt', 'desc'),
+    limit(50),
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const viewers = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          profileId: data.viewerId,
+          profileName: data.viewerName || 'Unknown',
+          profilePhoto: data.viewerPhoto || '',
+          viewedAt: data.viewedAt?.toMillis?.() ?? Date.now(),
+        };
+      });
+      onChange(viewers);
+    },
+    () => onChange([]),
+  );
 }

@@ -1,0 +1,29 @@
+/* VibeUp Nightlife Theme - Dark luxury, neon accents */
+
+:root {
+  /* Dark base */
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-card: #16161f;
+  --bg-elevated: #1c1c28;
+
+  /* Neon accents */
+  --accent-primary: #ff2d95;
+  --accent-secondary: #00d4aa;
+  --accent-tertiary: #7c3aed;
+  --accent-glow: rgba(255, 45, 149, 0.4);
+
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+
+  /* Status */
+  --online: #22c55e;
+  --out-tonight: #f59e0b;
+  --verified: #3b82f6;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-accent: rgba(255, 45, 149, 0.3);
+}

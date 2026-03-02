@@ -2,57 +2,15 @@ import { useEffect, useState } from 'react';
 import { storage } from '../utils/storage';
 import { Community } from '../types';
 import { useToast } from '../hooks/useToast';
-import { auth } from '../firebase';
-import { createRoom, joinRoom, leaveRoom, listenRooms, type Room } from '../firestore';
+import { getCurrentUid } from '../auth';
+import { createRoom, joinCommunity, leaveCommunity, listenCommunities, listenMyCommunityIds, listenRooms, seedCommunitiesIfEmpty, type Room } from '../firestore';
 import './Communities.css';
-
-const mockCommunities: Community[] = [
-  {
-    id: '1',
-    name: 'Pride & Joy',
-    description: 'A safe space for LGBTQ+ individuals to connect and share',
-    photo: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=300&fit=crop',
-    memberCount: 1250,
-    isExclusive: false,
-    tags: ['LGBTQ+', 'Community', 'Support'],
-    nsfw: false,
-  },
-  {
-    id: '2',
-    name: 'Kink & Fetish',
-    description: 'Open discussion about kinks, fetishes, and BDSM',
-    photo: 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&h=300&fit=crop',
-    memberCount: 850,
-    isExclusive: true,
-    tags: ['Kink', 'BDSM', 'Fetish'],
-    nsfw: true,
-  },
-  {
-    id: '3',
-    name: 'Bear Community',
-    description: 'For bears, cubs, and admirers',
-    photo: 'https://images.unsplash.com/photo-1478147427282-58a87a120781?w=400&h=300&fit=crop',
-    memberCount: 2100,
-    isExclusive: false,
-    tags: ['Bears', 'Community'],
-    nsfw: false,
-  },
-  {
-    id: '4',
-    name: 'Leather & Denim',
-    description: 'Exclusive community for leather and denim enthusiasts',
-    photo: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop',
-    memberCount: 450,
-    isExclusive: true,
-    tags: ['Leather', 'Denim', 'Exclusive'],
-    nsfw: true,
-  },
-];
 
 export default function Communities() {
   const { showToast, ToastContainer } = useToast();
+  const [communities, setCommunities] = useState<Community[]>([]);
+  const [joinedCommunityIds, setJoinedCommunityIds] = useState<string[]>([]);
   const [filter, setFilter] = useState<'all' | 'joined' | 'exclusive'>('all');
-  const [joinedCommunities, setJoinedCommunities] = useState<string[]>(storage.getJoinedCommunities());
   const [rooms, setRooms] = useState<Room[]>([]);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showInviteCodeModal, setShowInviteCodeModal] = useState(false);
@@ -62,29 +20,58 @@ export default function Communities() {
   const premiumFeatures = storage.getPremiumFeatures();
 
   useEffect(() => {
-    const unsubscribe = listenRooms((nextRooms) => {
-      setRooms(nextRooms);
-    });
-
-    return () => unsubscribe();
+    seedCommunitiesIfEmpty().catch(() => {});
   }, []);
 
-  const currentUid = auth.currentUser?.uid || null;
+  useEffect(() => {
+    const unsubRooms = listenRooms((nextRooms) => setRooms(nextRooms));
+    return () => unsubRooms();
+  }, []);
 
-  const handleJoinCommunity = (communityId: string) => {
-    const community = mockCommunities.find(c => c.id === communityId);
+  useEffect(() => {
+    const unsubCommunities = listenCommunities((next) => setCommunities(next));
+    return () => unsubCommunities();
+  }, []);
+
+  useEffect(() => {
+    const uid = getCurrentUid();
+    if (!uid) {
+      setJoinedCommunityIds([]);
+      return;
+    }
+    const unsub = listenMyCommunityIds(uid, (ids) => {
+      setJoinedCommunityIds(ids);
+      storage.saveJoinedCommunities(ids);
+    });
+    return () => unsub();
+  }, []);
+
+  const currentUid = getCurrentUid() ?? null;
+
+  const handleJoinCommunity = async (communityId: string) => {
+    const community = communities.find((c) => c.id === communityId);
     if (community?.isExclusive && !premiumFeatures.hasPremium) {
       showToast('This is an exclusive community. Upgrade to Premium to join.', 'info');
       return;
     }
 
-    const updated = joinedCommunities.includes(communityId)
-      ? joinedCommunities.filter(id => id !== communityId)
-      : [...joinedCommunities, communityId];
+    if (!currentUid) {
+      showToast('Please sign in first.', 'error');
+      return;
+    }
 
-    setJoinedCommunities(updated);
-    storage.saveJoinedCommunities(updated);
-    showToast(joinedCommunities.includes(communityId) ? 'Left community.' : 'Joined community successfully.', 'success');
+    const isJoined = joinedCommunityIds.includes(communityId);
+    try {
+      if (isJoined) {
+        await leaveCommunity(communityId, currentUid);
+        showToast('Left community.', 'success');
+      } else {
+        await joinCommunity(communityId, currentUid);
+        showToast('Joined community successfully.', 'success');
+      }
+    } catch {
+      showToast('Unable to update membership. Try again.', 'error');
+    }
   };
 
   const handleJoinRoom = (room: Room) => {
@@ -166,8 +153,8 @@ export default function Communities() {
     }
   };
 
-  const filteredCommunities = mockCommunities.filter(community => {
-    if (filter === 'joined') return joinedCommunities.includes(community.id);
+  const filteredCommunities = communities.filter((community) => {
+    if (filter === 'joined') return joinedCommunityIds.includes(community.id);
     if (filter === 'exclusive') return community.isExclusive;
     return true;
   });
@@ -210,10 +197,10 @@ export default function Communities() {
                 ))}
               </div>
               <button
-                className={`join-button ${joinedCommunities.includes(community.id) ? 'joined' : ''}`}
+                className={`join-button ${joinedCommunityIds.includes(community.id) ? 'joined' : ''}`}
                 onClick={() => handleJoinCommunity(community.id)}
               >
-                {joinedCommunities.includes(community.id) ? '✓ Joined' : 'Join Community'}
+                {joinedCommunityIds.includes(community.id) ? '✓ Joined' : 'Join Community'}
               </button>
             </div>
           </div>

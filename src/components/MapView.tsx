@@ -210,8 +210,24 @@ export default function MapView({
             el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
             el.style.position = 'relative';
 
-            // Add hookup badge if available
-            if (profile.hookUpNow) {
+            // Add going out badge
+            if (profile.goingOutTonight) {
+              const badge = document.createElement('div');
+              badge.innerHTML = '🌙';
+              badge.style.position = 'absolute';
+              badge.style.top = '-5px';
+              badge.style.right = '-5px';
+              badge.style.fontSize = '16px';
+              badge.style.background = '#7c3aed';
+              badge.style.borderRadius = '50%';
+              badge.style.width = '20px';
+              badge.style.height = '20px';
+              badge.style.display = 'flex';
+              badge.style.alignItems = 'center';
+              badge.style.justifyContent = 'center';
+              badge.style.zIndex = '1000';
+              el.appendChild(badge);
+            } else if (profile.hookUpNow) {
               const badge = document.createElement('div');
               badge.innerHTML = '🔥';
               badge.style.position = 'absolute';
@@ -238,7 +254,7 @@ export default function MapView({
                     <img src="${profile.photo}" alt="${profile.name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-bottom: 8px;">
                     <div style="font-weight: 600; margin-bottom: 4px;">${profile.name}, ${profile.age}</div>
                     <div style="font-size: 12px; color: #666;">${profile.distance !== undefined ? profile.distance + ' mi away' : 'Distance unknown'}</div>
-                    ${profile.hookUpNow ? '<div style="color: #FF6B9D; font-size: 12px; margin-top: 4px;">🔥 Available Now</div>' : ''}
+                    ${profile.goingOutTonight ? '<div style="color: #7c3aed; font-size: 12px; margin-top: 4px;">🌙 Going Out Tonight</div>' : profile.hookUpNow ? '<div style="color: #FF6B9D; font-size: 12px; margin-top: 4px;">🔥 Available Now</div>' : ''}
                   </div>
                 `)
               )

@@ -228,6 +228,11 @@ export const storage = {
           kinks: parsed.kinks || [],
           sexualOrientation: parsed.sexualOrientation || [],
           genderIdentity: parsed.genderIdentity || [],
+          lookingFor: parsed.lookingFor || [],
+          vibeType: parsed.vibeType || [],
+          outTonightOnly: parsed.outTonightOnly || false,
+          verifiedOnly: parsed.verifiedOnly || false,
+          bodyType: parsed.bodyType || [],
         };
       }
       return {
@@ -238,6 +243,11 @@ export const storage = {
         kinks: [],
         sexualOrientation: [],
         genderIdentity: [],
+        lookingFor: [],
+        vibeType: [],
+        outTonightOnly: false,
+        verifiedOnly: false,
+        bodyType: [],
       };
     } catch (error) {
       logger.error('Error getting filters:', error);
@@ -249,6 +259,11 @@ export const storage = {
         kinks: [],
         sexualOrientation: [],
         genderIdentity: [],
+        lookingFor: [],
+        vibeType: [],
+        outTonightOnly: false,
+        verifiedOnly: false,
+        bodyType: [],
       };
     }
   },
@@ -506,6 +521,34 @@ export const storage = {
     } catch (error) {
       logger.error('Error saving joined communities:', error);
     }
+  },
+
+  // Demo mode (when Firebase auth fails or is not configured)
+  DEMO_USER_ID: 'demo-user-vibeup',
+
+  getDemoUser(): { uid: string; email: string; displayName: string } | null {
+    try {
+      const data = safeGetItem('@vibeup:demoUser');
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  setDemoUser(user: { uid: string; email: string; displayName: string } | null): void {
+    try {
+      if (user) {
+        safeSetItem('@vibeup:demoUser', JSON.stringify(user));
+      } else {
+        safeRemoveItem('@vibeup:demoUser');
+      }
+    } catch (error) {
+      logger.error('Error saving demo user:', error);
+    }
+  },
+
+  isDemoMode(): boolean {
+    return this.getDemoUser() !== null;
   },
 
   // User session

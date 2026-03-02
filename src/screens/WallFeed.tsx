@@ -7,7 +7,8 @@ import { storage } from '../utils/storage';
 import { Comment } from '../types';
 import { useToast } from '../hooks/useToast';
 import { addWallPostComment, createWallPost, listenWallPosts, toggleWallPostLike } from '../firestore';
-import { auth } from '../firebase';
+import { uploadWallPostImage } from '../utils/uploadImage';
+import { getCurrentUid } from '../auth';
 import './WallFeed.css';
 
 interface FeedPost {
@@ -102,7 +103,7 @@ export default function WallFeed() {
   };
 
   const handleLike = (postId: string) => {
-    const uid = auth.currentUser?.uid || 'me';
+    const uid = getCurrentUid() ?? 'me';
     setPosts(posts.map(post => {
       if (post.id !== postId) return post;
       const currentLikes = Array.isArray(post.likes) ? post.likes : [];
@@ -122,7 +123,7 @@ export default function WallFeed() {
   };
 
   const handleAddComment = (postId: string, text: string) => {
-    const uid = auth.currentUser?.uid || 'me';
+    const uid = getCurrentUid() ?? 'me';
     const currentUser = storage.getUserProfile();
     const comment: Comment = {
       id: Date.now().toString(),
@@ -181,15 +182,17 @@ export default function WallFeed() {
     setIsLoadingMore(false);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewPostImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file || !file.type.startsWith('image/')) return;
+    try {
+      const url = await uploadWallPostImage(file);
+      setNewPostImage(url);
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      showToast('Failed to upload image. Try again.', 'error');
     }
+    e.target.value = '';
   };
 
   const handlePost = () => {

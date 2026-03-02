@@ -11,6 +11,10 @@ export interface FilterSettings {
   lookingFor?: string[];
   sexualOrientation?: string[];
   genderIdentity?: string[];
+  vibeType?: string[];
+  outTonightOnly?: boolean;
+  verifiedOnly?: boolean;
+  bodyType?: string[];
 }
 
 interface FiltersProps {
@@ -38,7 +42,14 @@ export default function Filters({
     lookingFor: filters.lookingFor || [],
     sexualOrientation: filters.sexualOrientation || [],
     genderIdentity: filters.genderIdentity || [],
+    vibeType: filters.vibeType || [],
+    outTonightOnly: filters.outTonightOnly || false,
+    verifiedOnly: filters.verifiedOnly || false,
+    bodyType: filters.bodyType || [],
   });
+
+  const vibeOptions = ['Party', 'Chill', 'Romantic', 'Wild', 'Travel'];
+  const bodyTypeOptions = ['Slim', 'Athletic', 'Average', 'Muscular', 'Bear', 'Dad bod'];
 
   if (!isOpen) return null;
 
@@ -66,6 +77,10 @@ export default function Filters({
       lookingFor: [],
       sexualOrientation: [],
       genderIdentity: [],
+      vibeType: [],
+      outTonightOnly: false,
+      verifiedOnly: false,
+      bodyType: [],
     };
     setLocalFilters(defaultFilters);
     storage.clearFilters();
@@ -201,6 +216,74 @@ export default function Filters({
               </div>
             </div>
           )}
+
+          <div className="filter-section">
+            <label className="filter-label">Vibe Type</label>
+            <div className="filter-interests">
+              {vibeOptions.map((vibe) => (
+                <button
+                  key={vibe}
+                  className={`filter-interest-tag ${localFilters.vibeType?.includes(vibe) ? 'active' : ''}`}
+                  onClick={() => {
+                    const current = localFilters.vibeType || [];
+                    setLocalFilters(prev => ({
+                      ...prev,
+                      vibeType: current.includes(vibe)
+                        ? current.filter(v => v !== vibe)
+                        : [...current, vibe],
+                    }));
+                  }}
+                >
+                  {vibe}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label">Quick Filters</label>
+            <div className="filter-checkboxes">
+              <label className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={localFilters.outTonightOnly || false}
+                  onChange={(e) => setLocalFilters(prev => ({ ...prev, outTonightOnly: e.target.checked }))}
+                />
+                <span>Out Tonight Only</span>
+              </label>
+              <label className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={localFilters.verifiedOnly || false}
+                  onChange={(e) => setLocalFilters(prev => ({ ...prev, verifiedOnly: e.target.checked }))}
+                />
+                <span>Verified Only</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label">Body Type</label>
+            <div className="filter-interests">
+              {bodyTypeOptions.map((body) => (
+                <button
+                  key={body}
+                  className={`filter-interest-tag ${localFilters.bodyType?.includes(body) ? 'active' : ''}`}
+                  onClick={() => {
+                    const current = localFilters.bodyType || [];
+                    setLocalFilters(prev => ({
+                      ...prev,
+                      bodyType: current.includes(body)
+                        ? current.filter(b => b !== body)
+                        : [...current, body],
+                    }));
+                  }}
+                >
+                  {body}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="filter-section">
             <label className="filter-label">Sexual Orientation</label>

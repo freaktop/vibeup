@@ -93,6 +93,17 @@ export default function ProfileDetailModal({
             </div>
           )}
 
+          {profile.into && profile.into.length > 0 && (
+            <div className="profile-detail-section">
+              <h3>Into</h3>
+              <div className="profile-detail-tags">
+                {profile.into.map((item, index) => (
+                  <span key={index} className="profile-detail-tag">{item}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(profile.intent || profile.vibeStyle) && (
             <div className="profile-detail-section">
               <h3>Vibe</h3>

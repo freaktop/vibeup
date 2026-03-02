@@ -11,7 +11,9 @@ import { useToast } from '../hooks/useToast';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
-import { createReport, listenMySwipes, listenProfiles, listenWhoLikedMe, removeSwipe, setSwipe, type SwipeType } from '../firestore';
+import { getCurrentUid } from '../auth';
+import { createReport, listenMySwipes, listenProfiles, listenWhoLikedMe, removeSwipe, setSwipe, unmatch, type SwipeType } from '../firestore';
+import { enrichProfilesWithDistance } from '../utils/geolocation';
 import './VibeUp.css';
 
 export default function VibeUp() {
@@ -37,7 +39,6 @@ export default function VibeUp() {
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    setSavedProfiles(storage.getSavedProfiles());
 
     let unsubProfiles: (() => void) | null = null;
     let unsubLikedMe: (() => void) | null = null;
@@ -61,7 +62,7 @@ export default function VibeUp() {
       }
 
       unsubProfiles = listenProfiles((p) => {
-        setAllProfiles(p);
+        enrichProfilesWithDistance(p).then(setAllProfiles);
       });
 
       unsubLikedMe = listenWhoLikedMe(user.uid, (ids) => {
@@ -79,10 +80,14 @@ export default function VibeUp() {
         const blocked = Object.entries(swipes)
           .filter(([, t]) => t === 'block')
           .map(([id]) => id);
+        const saved = Object.entries(swipes)
+          .filter(([, t]) => t === 'save')
+          .map(([id]) => id);
 
         setLikedProfiles(liked);
         setPassedProfiles(passed);
         setBlockedProfiles(blocked);
+        setSavedProfiles(saved);
       });
     });
 
@@ -95,7 +100,7 @@ export default function VibeUp() {
   }, []);
 
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
     const passed = new Set(passedProfiles);
     const liked = new Set(likedProfiles);
@@ -112,7 +117,7 @@ export default function VibeUp() {
   }, [profiles, currentIndex]);
 
   const handleLike = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
     const res = await setSwipe(uid, profileId, 'like');
     if (res.matchCreated) {
@@ -126,7 +131,7 @@ export default function VibeUp() {
   };
 
   const handlePass = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
     await setSwipe(uid, profileId, 'pass');
     moveToNext();
@@ -137,7 +142,7 @@ export default function VibeUp() {
       showToast('Super Like requires Premium.', 'info');
       return;
     }
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
     const res = await setSwipe(uid, profileId, 'superlike');
     if (res.matchCreated) {
@@ -174,16 +179,24 @@ export default function VibeUp() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const targetProfileId = profiles[currentIndex]?.id;
     if (!targetProfileId) return;
+    const uid = getCurrentUid();
+    if (!uid) return;
     const isSaved = savedProfiles.includes(targetProfileId);
-    if (isSaved) {
-      storage.removeSavedProfile(targetProfileId);
-      setSavedProfiles((prev) => prev.filter((id) => id !== targetProfileId));
-    } else {
-      storage.addSavedProfile(targetProfileId);
-      setSavedProfiles((prev) => [...prev, targetProfileId]);
+    try {
+      if (isSaved) {
+        await removeSwipe(uid, targetProfileId);
+        setSavedProfiles((prev) => prev.filter((id) => id !== targetProfileId));
+        showToast('Removed from saved.', 'success');
+      } else {
+        await setSwipe(uid, targetProfileId, 'save');
+        setSavedProfiles((prev) => [...prev, targetProfileId]);
+        showToast('Profile saved!', 'success');
+      }
+    } catch {
+      showToast('Failed to save. Try again.', 'error');
     }
   };
 
@@ -228,7 +241,7 @@ export default function VibeUp() {
     }
 
     if (selected === 'Block') {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) return;
       await setSwipe(uid, targetProfile.id, 'block');
       setSavedProfiles(prev => prev.filter(id => id !== targetProfile.id));
@@ -237,11 +250,15 @@ export default function VibeUp() {
     }
 
     if (selected === 'Unmatch') {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) return;
-      await removeSwipe(uid, targetProfile.id);
-      setSavedProfiles(prev => prev.filter(id => id !== targetProfile.id));
-      showToast('Match removed.', 'success');
+      try {
+        await unmatch(uid, targetProfile.id);
+        setSavedProfiles(prev => prev.filter(id => id !== targetProfile.id));
+        showToast('Match removed.', 'success');
+      } catch {
+        showToast('Failed to unmatch. Try again.', 'error');
+      }
       return;
     }
 

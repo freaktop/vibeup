@@ -46,7 +46,7 @@ service cloud.firestore {
         && request.auth.uid in request.resource.data.users
         && request.resource.data.users.size() == 2;
       allow update: if isMatchMember(matchId);
-      allow delete: if false;
+      allow delete: if isMatchMember(matchId);
 
       match /messages/{messageId} {
         allow read, create: if isMatchMember(matchId);
@@ -90,6 +90,19 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
       allow update: if signedIn();
       allow delete: if signedIn();
+    }
+
+    match /communities/{communityId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /profileViews/{viewId} {
+      allow read: if signedIn() && resource.data.profileId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.viewerId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /{document=**} {

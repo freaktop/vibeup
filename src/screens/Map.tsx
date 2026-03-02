@@ -13,7 +13,8 @@ import { useToast } from '../hooks/useToast';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
-import { createReport, listenMySwipes, listenProfiles, removeSwipe, setSwipe } from '../firestore';
+import { getCurrentUid } from '../auth';
+import { createReport, listenMySwipes, listenProfiles, recordProfileView, removeSwipe, setSwipe } from '../firestore';
 import './Map.css';
 
 export default function Map() {
@@ -28,6 +29,7 @@ export default function Map() {
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [exploreMode, setExploreMode] = useState(false);
   const [sneakyLinks, setSneakyLinks] = useState(false);
+  const [whosOutTonight, setWhosOutTonight] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
@@ -166,11 +168,12 @@ export default function Map() {
   };
 
   const handleProfileClick = (profile: Profile) => {
+    recordProfileView(profile.id).catch(() => {});
     setSelectedProfile(profile);
   };
 
   const handleLike = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     await setSwipe(uid, profileId, 'like');
@@ -178,7 +181,7 @@ export default function Map() {
   };
 
   const handlePass = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     await setSwipe(uid, profileId, 'pass');
@@ -191,7 +194,7 @@ export default function Map() {
       return;
     }
 
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     await setSwipe(uid, profileId, 'superlike');
@@ -231,7 +234,7 @@ export default function Map() {
     }
 
     if (selected === 'Block') {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) return;
       await setSwipe(uid, selectedProfile.id, 'block');
       setSelectedProfile(null);
@@ -240,7 +243,7 @@ export default function Map() {
     }
 
     if (selected === 'Unmatch') {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) return;
       await removeSwipe(uid, selectedProfile.id);
       setSelectedProfile(null);
@@ -317,14 +320,13 @@ export default function Map() {
 
   // Filter profiles based on mode
   let profilesToShow = profiles;
-  if (sneakyLinks) {
-    // Show only hookup now profiles
+  if (whosOutTonight) {
+    profilesToShow = profiles.filter(p => p.goingOutTonight === true || p.visibleOnMap === true);
+  } else if (sneakyLinks) {
     profilesToShow = profiles.filter(p => p.hookUpNow === true);
   } else if (exploreMode) {
-    // Explore mode - show all profiles with location
     profilesToShow = profiles.filter(p => p.lat && p.lng);
   } else {
-    // Cruise mode - default, shows all profiles
     profilesToShow = profiles;
   }
 
@@ -370,30 +372,45 @@ export default function Map() {
           onClick={() => {
             setExploreMode(true);
             setSneakyLinks(false);
+            setWhosOutTonight(false);
           }}
           title="Explore - View all profiles in this area"
         >
           🔍 Explore {exploreMode && `(${profilesToShow.length})`}
         </button>
         <button
-          className={`map-cruise-btn ${!exploreMode && !sneakyLinks ? 'active' : ''}`}
+          className={`map-cruise-btn ${!exploreMode && !sneakyLinks && !whosOutTonight ? 'active' : ''}`}
           onClick={() => {
             setExploreMode(false);
             setSneakyLinks(false);
+            setWhosOutTonight(false);
           }}
           title="Cruise - Browse all profiles"
         >
-          🚗 Cruise {!exploreMode && !sneakyLinks && `(${profilesToShow.length})`}
+          🚗 Cruise {!exploreMode && !sneakyLinks && !whosOutTonight && `(${profilesToShow.length})`}
         </button>
         <button
           className={`map-sneaky-btn ${sneakyLinks ? 'active' : ''}`}
           onClick={() => {
             setSneakyLinks(true);
             setExploreMode(false);
+            setWhosOutTonight(false);
           }}
           title="Sneaky Links - Show hookup spots only"
         >
           🔥 Sneaky Links {sneakyLinks && `(${profilesToShow.length})`}
+        </button>
+        <button
+          className={`map-whosout-btn ${whosOutTonight ? 'active' : ''}`}
+          onClick={() => {
+            setWhosOutTonight(!whosOutTonight);
+            if (whosOutTonight) {
+              setSneakyLinks(false);
+            }
+          }}
+          title="Who's Out Tonight - Show profiles going out"
+        >
+          🌙 Who's Out {whosOutTonight && `(${profilesToShow.length})`}
         </button>
         <button
           className="map-search-btn"

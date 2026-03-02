@@ -14,6 +14,9 @@ export const config = {
     apiKey: import.meta.env.VITE_REVENUECAT_API_KEY || '',
     entitlementId: import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID || 'premium',
   },
+  stripe: {
+    paymentLinkUrl: import.meta.env.VITE_STRIPE_PAYMENT_LINK_URL || '',
+  },
 };
 
 // Validate required config

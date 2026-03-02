@@ -42,10 +42,20 @@ registerSW({
   immediate: true,
 });
 
+import { AuthProvider } from './contexts/AuthContext'
+import { storage } from './utils/storage'
+
+// Production: clear any demo session so users must sign in with real auth
+if (import.meta.env.PROD) {
+  storage.setDemoUser(null);
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 )

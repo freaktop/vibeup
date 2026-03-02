@@ -9,10 +9,12 @@ import { storage } from '../utils/storage';
 import { shareProfile } from '../utils/shareProfile';
 import { runPremiumPurchase } from '../utils/premiumPurchase';
 import { useToast } from '../hooks/useToast';
-import { Profile } from '../types';
+import { Profile, Event } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
-import { createReport, listenMySwipes, listenProfiles, removeSwipe, setSwipe, type SwipeType } from '../firestore';
+import { getCurrentUid } from '../auth';
+import { createReport, listenEvents, listenMySwipes, listenProfiles, removeSwipe, setEventRsvp, setSwipe, unmatch, type SwipeType } from '../firestore';
+import { enrichProfilesWithDistance } from '../utils/geolocation';
 import './RightNow.css';
 
 export default function RightNow() {
@@ -22,6 +24,7 @@ export default function RightNow() {
   const [likedProfiles, setLikedProfiles] = useState<string[]>([]);
   const [passedProfiles, setPassedProfiles] = useState<string[]>([]);
   const [superLikedProfiles, setSuperLikedProfiles] = useState<string[]>([]);
+  const [savedProfiles, setSavedProfiles] = useState<string[]>([]);
   const [blockedProfiles, setBlockedProfiles] = useState<string[]>([]);
   const [showMatchAnimation, setShowMatchAnimation] = useState(false);
   const [matchedProfile, setMatchedProfile] = useState<Profile | null>(null);
@@ -34,7 +37,9 @@ export default function RightNow() {
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportProfile, setReportProfile] = useState<Profile | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
   const { showToast, ToastContainer } = useToast();
+  const userId = getCurrentUid() ?? '';
 
   useEffect(() => {
     let unsubProfiles: (() => void) | null = null;
@@ -55,7 +60,7 @@ export default function RightNow() {
       }
 
       unsubProfiles = listenProfiles((profileRows) => {
-        setAllProfiles(profileRows);
+        enrichProfilesWithDistance(profileRows).then(setAllProfiles);
       });
 
       unsubSwipes = listenMySwipes(user.uid, (swipes: Record<string, SwipeType>) => {
@@ -68,6 +73,9 @@ export default function RightNow() {
         const superLiked = Object.entries(swipes)
           .filter(([, t]) => t === 'superlike')
           .map(([id]) => id);
+        const saved = Object.entries(swipes)
+          .filter(([, t]) => t === 'save')
+          .map(([id]) => id);
         const blocked = Object.entries(swipes)
           .filter(([, t]) => t === 'block')
           .map(([id]) => id);
@@ -75,6 +83,7 @@ export default function RightNow() {
         setLikedProfiles(liked);
         setPassedProfiles(passed);
         setSuperLikedProfiles(superLiked);
+        setSavedProfiles(saved);
         setBlockedProfiles(blocked);
       });
     });
@@ -87,8 +96,15 @@ export default function RightNow() {
   }, []);
 
   useEffect(() => {
+    const unsub = listenEvents((rows) => setEvents(rows));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
     const availableNow = allProfiles.filter((profile) =>
-      profile.hookUpNow === true && !passedProfiles.includes(profile.id) && !blockedProfiles.includes(profile.id)
+      (profile.goingOutTonight === true || profile.hookUpNow === true) &&
+      !passedProfiles.includes(profile.id) &&
+      !blockedProfiles.includes(profile.id)
     );
     setProfiles(availableNow);
   }, [allProfiles, passedProfiles, blockedProfiles]);
@@ -106,7 +122,7 @@ export default function RightNow() {
   };
 
   const handleLike = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     const res = await setSwipe(uid, profileId, 'like');
@@ -129,7 +145,7 @@ export default function RightNow() {
       return;
     }
 
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     const res = await setSwipe(uid, profileId, 'superlike');
@@ -152,7 +168,7 @@ export default function RightNow() {
   };
 
   const handlePass = async (profileId: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
 
     await setSwipe(uid, profileId, 'pass');
@@ -182,12 +198,22 @@ export default function RightNow() {
     }
   };
 
-  const handleSave = (profileId: string) => {
-    const isSaved = storage.getSavedProfiles().includes(profileId);
-    if (isSaved) {
-      storage.removeSavedProfile(profileId);
-    } else {
-      storage.addSavedProfile(profileId);
+  const handleSave = async (profileId: string) => {
+    const uid = getCurrentUid();
+    if (!uid) return;
+    const isSaved = savedProfiles.includes(profileId);
+    try {
+      if (isSaved) {
+        await removeSwipe(uid, profileId);
+        setSavedProfiles((prev) => prev.filter((id) => id !== profileId));
+        showToast('Removed from saved.', 'success');
+      } else {
+        await setSwipe(uid, profileId, 'save');
+        setSavedProfiles((prev) => [...prev, profileId]);
+        showToast('Profile saved!', 'success');
+      }
+    } catch {
+      showToast('Failed to save. Try again.', 'error');
     }
   };
 
@@ -232,7 +258,7 @@ export default function RightNow() {
     }
 
     if (selected === 'Block') {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) return;
       await setSwipe(uid, targetProfile.id, 'block');
       showToast('User blocked.', 'success');
@@ -240,10 +266,15 @@ export default function RightNow() {
     }
 
     if (selected === 'Unmatch') {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) return;
-      await removeSwipe(uid, targetProfile.id);
-      showToast('Match removed.', 'success');
+      try {
+        await unmatch(uid, targetProfile.id);
+        setSavedProfiles((prev) => prev.filter((id) => id !== targetProfile.id));
+        showToast('Match removed.', 'success');
+      } catch {
+        showToast('Failed to unmatch. Try again.', 'error');
+      }
       return;
     }
 
@@ -288,25 +319,89 @@ export default function RightNow() {
     setShowPremiumModal(false);
   };
 
-  if (profiles.length === 0) {
+  const getRSVPStatus = (event: Event): 'going' | 'interested' | 'notGoing' | null => {
+    if (event.rsvps.going.includes(userId)) return 'going';
+    if (event.rsvps.interested.includes(userId)) return 'interested';
+    if (event.rsvps.notGoing.includes(userId)) return 'notGoing';
+    return null;
+  };
+
+  const handleRSVP = (eventId: string, status: 'going' | 'interested' | 'notGoing') => {
+    setEventRsvp(eventId, userId, status).then(() => {
+      showToast(status === 'going' ? "You're going! 🎉" : status === 'interested' ? 'Marked interested' : 'Updated', 'success');
+    }).catch(() => showToast('Unable to update RSVP.', 'error'));
+  };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tonightEvents = events.filter(e => {
+    const d = new Date(e.date);
+    return d >= today && d < tomorrow;
+  });
+
+  if (profiles.length === 0 && tonightEvents.length === 0) {
     return (
-      <div className="rightnow-container">
-        <div className="rightnow-empty">
-          <div className="empty-icon">🔥</div>
-          <div className="empty-title">No one available right now</div>
-          <div className="empty-text">Check back soon or enable "Available Now" in your profile to get seen!</div>
-          <button className="refresh-button" onClick={handleRefresh} disabled={isRefreshing}>
-            {isRefreshing ? 'Refreshing...' : '🔄 Refresh'}
-          </button>
+      <PullToRefresh onRefresh={handleRefresh}>
+        <div className="rightnow-container">
+          <div className="rightnow-header">
+            <h2 className="rightnow-title">Out Tonight</h2>
+            <p className="rightnow-subtitle">See who's going out and RSVP to venues</p>
+          </div>
+          <div className="rightnow-empty">
+            <div className="empty-icon">🌙</div>
+            <div className="empty-title">No one going out tonight yet</div>
+            <div className="empty-text">Turn on "Going Out Tonight" in your profile to get seen, or check back later!</div>
+            <button className="refresh-button" onClick={handleRefresh} disabled={isRefreshing}>
+              {isRefreshing ? 'Refreshing...' : '🔄 Refresh'}
+            </button>
+          </div>
         </div>
-      </div>
+      </PullToRefresh>
     );
   }
 
   const currentProfile = profiles[currentIndex];
   const canSuperLike = premiumFeatures.hasPremium || premiumFeatures.superLikesRemaining > 0;
 
-  if (!currentProfile) {
+  const OutTonightEvents = () => (
+    tonightEvents.length > 0 ? (
+      <div className="rightnow-events">
+        <h3 className="rightnow-events-title">Tonight's Events</h3>
+        <div className="rightnow-events-list">
+          {tonightEvents.slice(0, 5).map((event) => {
+            const rsvp = getRSVPStatus(event);
+            return (
+              <div key={event.id} className="rightnow-event-card">
+                <div className="rightnow-event-info">
+                  <div className="rightnow-event-name">{event.title}</div>
+                  <div className="rightnow-event-location">{event.location}</div>
+                  <div className="rightnow-event-time">
+                    {new Date(event.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                  </div>
+                </div>
+                <div className="rightnow-event-rsvp">
+                  {rsvp === 'going' ? (
+                    <span className="rsvp-going">✓ Going</span>
+                  ) : (
+                    <button
+                      className="rsvp-btn"
+                      onClick={() => handleRSVP(event.id, 'going')}
+                    >
+                      RSVP
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ) : null
+  );
+
+  if (!currentProfile && profiles.length === 0) {
     return (
       <div className="rightnow-empty">
         <div>Loading profiles...</div>
@@ -318,12 +413,15 @@ export default function RightNow() {
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="rightnow-container">
         <div className="rightnow-title">
-          <h2>Right Now (Live)</h2>
-          <p>Profiles who are available and active in this moment.</p>
+          <h2>Out Tonight</h2>
+          <p>Who's going out tonight. RSVP to venues and connect.</p>
         </div>
+
+        <OutTonightEvents />
+
         <div className="rightnow-header">
           <div className="rightnow-count">
-            {profiles.length} {profiles.length === 1 ? 'person' : 'people'} available now
+            {profiles.length} {profiles.length === 1 ? 'person' : 'people'} going out
           </div>
           <button
             className="view-toggle-button"
@@ -352,7 +450,7 @@ export default function RightNow() {
                 onReport={() => handleReport(profile)}
                 onMenu={handleMenu}
                 isLiked={likedProfiles.includes(profile.id)}
-                isSaved={storage.getSavedProfiles().includes(profile.id)}
+                isSaved={savedProfiles.includes(profile.id)}
                 isSuperLiked={superLikedProfiles.includes(profile.id)}
                 canSuperLike={canSuperLike}
               />
@@ -377,7 +475,9 @@ export default function RightNow() {
                 <div className="grid-item-info">
                   <div className="grid-item-name">{profile.name}, {profile.age}</div>
                   <div className="grid-item-distance">{profile.distance} mi away</div>
-                  <div className="grid-item-badge">🔥 Available Now</div>
+                  <div className="grid-item-badge">
+                    {profile.goingOutTonight ? '🌙 Out Tonight' : '🔥 Available Now'}
+                  </div>
                 </div>
               </div>
             ))}

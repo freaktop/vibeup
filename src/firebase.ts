@@ -5,6 +5,7 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,8 +17,15 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-export const firebaseApp = initializeApp(firebaseConfig);
+// Validate config - 401 often means API key missing or restricted
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === 'undefined') {
+  console.error('[Firebase] API key missing. Check .env has VITE_FIREBASE_API_KEY and restart dev server.');
+}
+if (!firebaseConfig.projectId || firebaseConfig.projectId === 'undefined') {
+  console.error('[Firebase] Project ID missing. Check .env has VITE_FIREBASE_PROJECT_ID.');
+}
 
+export const firebaseApp = initializeApp(firebaseConfig);
 export const auth = getAuth(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -26,3 +34,5 @@ export const db = initializeFirestore(firebaseApp, {
     tabManager: persistentMultipleTabManager(),
   }),
 });
+
+export const firebaseStorage = getStorage(firebaseApp);

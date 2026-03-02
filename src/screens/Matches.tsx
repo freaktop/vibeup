@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
+import { getCurrentUid } from '../auth';
 import { listenMatches, listenProfiles } from '../firestore';
 import './Matches.css';
 
@@ -43,7 +44,7 @@ export default function Matches() {
   }, []);
 
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) return;
     // matches are derived from allProfiles + listenMatches; this effect ensures UI updates when profiles load
   }, [allProfiles]);

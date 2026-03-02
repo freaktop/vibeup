@@ -3,67 +3,55 @@ import { storage } from '../utils/storage';
 import { Viewer } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
-import { listenProfiles } from '../firestore';
+import { getCurrentUid } from '../auth';
+import { listenBlockedIds, listenProfileViewers } from '../firestore';
 import './WhoViewedYou.css';
 
 export default function WhoViewedYou() {
   const [viewers, setViewers] = useState<Viewer[]>([]);
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const [premiumFeatures] = useState(storage.getPremiumFeatures());
-  const [profileMap, setProfileMap] = useState<Record<string, { name: string; photo: string }>>({});
 
   useEffect(() => {
-    let unsubProfiles: (() => void) | null = null;
+    let unsub: (() => void) | null = null;
+    let unsubBlocked: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
-      unsubProfiles?.();
+      unsub?.();
+      unsubBlocked?.();
 
-      if (!user) {
-        setProfileMap({});
+      if (!user || !premiumFeatures.hasPremium && !premiumFeatures.canSeeViewers) {
+        setViewers([]);
+        setBlockedIds(new Set());
         return;
       }
 
-      unsubProfiles = listenProfiles((profiles) => {
-        const index: Record<string, { name: string; photo: string }> = {};
-        for (const profile of profiles) {
-          index[profile.id] = {
-            name: profile.name,
-            photo: profile.photo,
-          };
-        }
-        setProfileMap(index);
+      const uid = getCurrentUid();
+      if (!uid) {
+        setViewers([]);
+        setBlockedIds(new Set());
+        return;
+      }
+
+      unsubBlocked = listenBlockedIds(uid, (ids) => setBlockedIds(new Set(ids)));
+      unsub = listenProfileViewers(uid, (rows) => {
+        setViewers(rows.map((r) => ({
+          profileId: r.profileId,
+          profileName: r.profileName,
+          profilePhoto: r.profilePhoto,
+          viewedAt: r.viewedAt,
+        })));
       });
     });
 
     return () => {
       unsubAuth();
-      unsubProfiles?.();
+      unsub?.();
+      unsubBlocked?.();
     };
-  }, []);
+  }, [premiumFeatures.hasPremium, premiumFeatures.canSeeViewers]);
 
-  useEffect(() => {
-    loadViewers();
-  }, [profileMap, premiumFeatures.hasPremium, premiumFeatures.canSeeViewers]);
-
-  const loadViewers = () => {
-    if (!premiumFeatures.hasPremium && !premiumFeatures.canSeeViewers) {
-      return;
-    }
-    
-    const savedViewers = storage.getProfileViewers();
-    const blockedProfiles = storage.getBlockedProfiles();
-    // Convert to full viewer objects with profile data
-    const fullViewers: Viewer[] = savedViewers
-      .filter(viewer => !blockedProfiles.includes(viewer.profileId))
-      .map(viewer => {
-      const profile = profileMap[viewer.profileId];
-      return {
-        ...viewer,
-        profileName: profile?.name || 'Unknown',
-        profilePhoto: profile?.photo || '',
-      };
-    });
-    setViewers(fullViewers);
-  };
+  const filteredViewers = viewers.filter((v) => !blockedIds.has(v.profileId));
 
   const formatTime = (timestamp: number) => {
     const minutes = Math.floor((Date.now() - timestamp) / 60000);
@@ -92,7 +80,7 @@ export default function WhoViewedYou() {
     );
   }
 
-  if (viewers.length === 0) {
+  if (filteredViewers.length === 0) {
     return (
       <div className="who-viewed-container">
         <div className="empty-state">
@@ -108,10 +96,10 @@ export default function WhoViewedYou() {
     <div className="who-viewed-container">
       <div className="viewers-header">
         <h2>Who Viewed You</h2>
-        <span className="viewers-count">{viewers.length} views</span>
+        <span className="viewers-count">{filteredViewers.length} views</span>
       </div>
       <div className="viewers-list">
-        {viewers.map((viewer) => (
+        {filteredViewers.map((viewer) => (
           <div key={viewer.profileId} className="viewer-item">
             <img src={viewer.profilePhoto} alt={viewer.profileName} className="viewer-photo" />
             <div className="viewer-info">

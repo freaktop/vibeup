@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { signOut } from 'firebase/auth';
 import { storage } from '../utils/storage';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
-import { createReport, listenProfiles, listenReports } from '../firestore';
+import { useAuth } from '../contexts/AuthContext';
+import { createReport, listenBlockedIds, listenProfiles, listenReports, removeSwipe } from '../firestore';
 import { legalConfig } from '../config/legal';
 import { useToast } from '../hooks/useToast';
 import './Settings.css';
 
 export default function Settings() {
   const { showToast, ToastContainer } = useToast();
+  const { signOutDemo } = useAuth();
   const [notifications, setNotifications] = useState({
     messages: true,
     matches: true,
@@ -23,7 +26,7 @@ export default function Settings() {
   const [showReportProblemModal, setShowReportProblemModal] = useState(false);
   const [reportProblemText, setReportProblemText] = useState('');
   const [reportCount, setReportCount] = useState(0);
-  const blockedCount = storage.getBlockedProfiles().length;
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
 
   useEffect(() => {
     const profile = storage.getUserProfile();
@@ -32,14 +35,18 @@ export default function Settings() {
     }
 
     let unsubProfiles: (() => void) | null = null;
+    let unsubBlocked: (() => void) | null = null;
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       unsubProfiles?.();
+      unsubBlocked?.();
 
       if (!user) {
         setProfileNameById({});
+        setBlockedIds([]);
         return;
       }
 
+      unsubBlocked = listenBlockedIds(user.uid, setBlockedIds);
       unsubProfiles = listenProfiles((profiles) => {
         const next: Record<string, string> = {};
         for (const currentProfile of profiles) {
@@ -56,6 +63,7 @@ export default function Settings() {
     return () => {
       unsubAuth();
       unsubProfiles?.();
+      unsubBlocked?.();
       unsubReports();
     };
   }, []);
@@ -67,13 +75,16 @@ export default function Settings() {
     storage.saveUserProfile({ ...profile, notificationPreferences: updated });
   };
 
-  const handleLogout = () => {
-    storage.logout();
+  const handleLogout = async () => {
     setShowLogoutConfirm(false);
-    // Reload app to show login screen
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    signOutDemo(); // Clear demo mode if active
+    try {
+      await signOut(auth);
+    } catch {
+      // Ignore if not signed in with Firebase
+    }
+    storage.logout();
+    setTimeout(() => window.location.reload(), 300);
   };
 
   const handleDeactivate = () => {
@@ -81,14 +92,20 @@ export default function Settings() {
     setShowDeactivateConfirm(false);
   };
 
-  const blockedProfiles = storage.getBlockedProfiles().map((id) => ({
+  const blockedProfiles = blockedIds.map((id) => ({
     id,
     label: profileNameById[id] || `User ${id}`,
   }));
 
-  const handleUnblockUser = (profileId: string, label: string) => {
-    storage.removeBlockedProfile(profileId);
-    showToast(`${label} has been unblocked.`, 'success');
+  const handleUnblockUser = async (profileId: string, label: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    try {
+      await removeSwipe(uid, profileId);
+      showToast(`${label} has been unblocked.`, 'success');
+    } catch {
+      showToast('Could not unblock. Try again.', 'error');
+    }
   };
 
   const handleSubmitProblemReport = () => {
@@ -197,8 +214,7 @@ export default function Settings() {
           <span>→</span>
         </button>
         <button className="settings-button" onClick={() => {
-          const blocked = storage.getBlockedProfiles();
-          if (blocked.length === 0) {
+          if (blockedIds.length === 0) {
             showToast('No blocked users yet. Use a profile menu to block someone.', 'info');
           } else {
             setShowBlockedUsersModal(true);
@@ -206,7 +222,7 @@ export default function Settings() {
         }}>
           <span>🚫</span>
           <span>Blocked Users</span>
-          <span>{blockedCount > 0 ? blockedCount : ''}</span>
+          <span>{blockedIds.length > 0 ? blockedIds.length : ''}</span>
         </button>
         <button className="settings-button" onClick={() => {
           showToast('Use profile menu (⋮) → Report. Reports are reviewed within 24 hours.', 'info');

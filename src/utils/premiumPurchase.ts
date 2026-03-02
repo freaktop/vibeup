@@ -1,11 +1,17 @@
 import { Capacitor } from '@capacitor/core';
-import { auth } from '../firebase';
+import { getCurrentUid } from '../auth';
 import { config } from '../config/api';
 import { getOfferings, initializePurchases, purchasePackage } from './purchases';
 
 export async function runPremiumPurchase(feature: string): Promise<{ success: boolean; message: string }> {
+  // Web: use Stripe Payment Link if configured
   if (!Capacitor.isNativePlatform()) {
-    return { success: false, message: 'Purchases are available on native mobile builds only.' };
+    const paymentLink = config.stripe?.paymentLinkUrl?.trim();
+    if (paymentLink) {
+      window.open(paymentLink, '_blank', 'noopener,noreferrer');
+      return { success: true, message: 'Opened payment page. Complete checkout in the new tab.' };
+    }
+    return { success: false, message: 'Web purchases: Add VITE_STRIPE_PAYMENT_LINK_URL to .env with your Stripe Payment Link.' };
   }
 
   if (!config.revenuecat.apiKey) {
@@ -13,7 +19,7 @@ export async function runPremiumPurchase(feature: string): Promise<{ success: bo
   }
 
   try {
-    await initializePurchases(auth.currentUser?.uid);
+    await initializePurchases(getCurrentUid());
 
     const offerings = await getOfferings();
     const packages = offerings?.current?.availablePackages || [];

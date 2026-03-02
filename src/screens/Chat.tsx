@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, LinkUpRequest } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
+import { getCurrentUid } from '../auth';
 import { getProfile, listenChatMessages, matchIdFor, sendChatMessage } from '../firestore';
+import { uploadChatImage, uploadVoiceNote } from '../utils/uploadImage';
 import { useToast } from '../hooks/useToast';
 import './Chat.css';
 
@@ -11,6 +13,12 @@ interface ChatProps {
 }
 
 const REACTIONS = ['❤️', '😂', '😮', '😢', '🔥', '👍'];
+const INVITE_PRESETS = [
+  { label: 'Drinks?', text: 'Drinks tonight? 🍸' },
+  { label: 'Club?', text: 'Going to the club tonight? 🎉' },
+  { label: 'After party?', text: 'After party? 🌙' },
+  { label: 'Date?', text: 'Want to grab dinner? 💕' },
+];
 
 export default function Chat({ profileId }: ChatProps) {
   const { showToast, ToastContainer } = useToast();
@@ -29,8 +37,11 @@ export default function Chat({ profileId }: ChatProps) {
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const [profile, setProfile] = useState<any>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
 
   useEffect(() => {
     if (profileId) {
@@ -78,7 +89,7 @@ export default function Chat({ profileId }: ChatProps) {
   };
 
   const sendMessage = async (type: 'text' | 'image' | 'voice' = 'text', content?: string, fileUrl?: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid || !profileId || !matchId) return;
     if (type === 'text' && !inputText.trim()) return;
 
@@ -94,21 +105,64 @@ export default function Chat({ profileId }: ChatProps) {
     setInputText('');
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        sendMessage('image', undefined, reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file || !file.type.startsWith('image/') || !matchId) return;
+    try {
+      const url = await uploadChatImage(file, matchId);
+      await sendMessage('image', undefined, url);
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      showToast('Failed to upload image. Try again.', 'error');
     }
+    e.target.value = '';
   };
 
-  const handleVoiceNote = () => {
-    // Simulate voice note recording
-    const voiceNoteUrl = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGW57+OeTQ8MT6Xh8LZjHAY4kdfyzHksBSR3x/DdkEAKFF606euoVRQKRp/g8r5sIQUrgc7y2Yk2CBhlue/jnk0PDE+l4fC2YxwGOJHX8sx5LAUkd8fw3ZBAC';
-    sendMessage('voice', 'Voice note', voiceNoteUrl);
+  const handleVoiceNote = async () => {
+    if (!matchId) return;
+
+    if (isRecordingVoice) {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+      }
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        if (blob.size < 100) {
+          showToast('Recording too short. Try again.', 'info');
+          setIsRecordingVoice(false);
+          return;
+        }
+        try {
+          const url = await uploadVoiceNote(blob, matchId);
+          await sendMessage('voice', 'Voice note', url);
+        } catch (err) {
+          console.error('Voice upload failed:', err);
+          showToast('Failed to send voice note.', 'error');
+        }
+        setIsRecordingVoice(false);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecordingVoice(true);
+    } catch (err) {
+      console.error('Microphone access failed:', err);
+      showToast('Microphone access denied. Enable it in browser settings.', 'error');
+    }
   };
 
   const addReaction = (messageId: string, emoji: string) => {
@@ -206,7 +260,7 @@ export default function Chat({ profileId }: ChatProps) {
           </div>
         </div>
         <button className="chat-linkup-btn" onClick={() => setShowLinkUpModal(true)}>
-          📅 LinkUp
+          🎉 Invite Out
         </button>
       </div>
 
@@ -326,6 +380,19 @@ export default function Chat({ profileId }: ChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
+      <div className="chat-quick-invites">
+        {INVITE_PRESETS.map((preset) => (
+          <button
+            key={preset.label}
+            className="chat-quick-preset"
+            onClick={() => {
+              setInputText(preset.text);
+            }}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
       <div className="chat-input-container">
         <input
           ref={fileInputRef}
@@ -337,8 +404,12 @@ export default function Chat({ profileId }: ChatProps) {
         <button className="chat-attach-btn" onClick={() => fileInputRef.current?.click()}>
           📷
         </button>
-        <button className="chat-voice-btn" onClick={handleVoiceNote}>
-          🎤
+        <button
+          className={`chat-voice-btn ${isRecordingVoice ? 'recording' : ''}`}
+          onClick={handleVoiceNote}
+          title={isRecordingVoice ? 'Tap to stop' : 'Record voice note'}
+        >
+          {isRecordingVoice ? '⏹' : '🎤'}
         </button>
         <input
           type="text"
@@ -365,11 +436,13 @@ export default function Chat({ profileId }: ChatProps) {
               value={linkUpForm.intent}
               onChange={(e) => setLinkUpForm(prev => ({ ...prev, intent: e.target.value }))}
             >
-              <option value="">Select Intent</option>
+              <option value="">What are you inviting them to?</option>
+              <option value="Drinks">Drinks</option>
+              <option value="Club">Club</option>
+              <option value="After party">After party</option>
+              <option value="Date">Date</option>
               <option value="Friends">Friends</option>
               <option value="Events">Events</option>
-              <option value="Dating">Dating</option>
-              <option value="Just Browsing">Just Browsing</option>
             </select>
             <input
               type="text"

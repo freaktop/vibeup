@@ -4,14 +4,16 @@
       "collectionGroup": "swipes",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {
-          "fieldPath": "targetId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "type",
-          "order": "ASCENDING"
-        }
+        {"fieldPath": "targetId", "order": "ASCENDING"},
+        {"fieldPath": "type", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "profileViews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "profileId", "order": "ASCENDING"},
+        {"fieldPath": "viewedAt", "order": "DESCENDING"}
       ]
     }
   ],

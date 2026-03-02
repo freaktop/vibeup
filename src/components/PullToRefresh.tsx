@@ -20,10 +20,12 @@ export default function PullToRefresh({ onRefresh, children, threshold = 80 }: P
     if (!container) return;
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (container.scrollTop === 0) {
-        startY.current = e.touches[0].clientY;
-        setIsPulling(true);
-      }
+      requestAnimationFrame(() => {
+        if (container.scrollTop === 0) {
+          startY.current = e.touches[0].clientY;
+          setIsPulling(true);
+        }
+      });
     };
 
     const handleTouchMove = (e: TouchEvent) => {

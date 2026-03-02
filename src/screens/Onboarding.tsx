@@ -35,7 +35,9 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     storage.saveUserProfile(nextProfile);
     storage.setOnboardingComplete(true);
 
-    upsertMyProfile(nextProfile).catch(() => null);
+    upsertMyProfile(nextProfile).catch((err) => {
+      console.error('Onboarding: failed to create profile', err);
+    });
     if (enableMockSeed) {
       seedMockProfilesIfEmpty().catch(() => null);
     }
@@ -47,7 +49,9 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     storage.setOnboardingComplete(true);
 
     const existingProfile = storage.getUserProfile() || {};
-    upsertMyProfile(existingProfile).catch(() => null);
+    upsertMyProfile(existingProfile).catch((err) => {
+      console.error('Onboarding: failed to create profile on skip', err);
+    });
     if (enableMockSeed) {
       seedMockProfilesIfEmpty().catch(() => null);
     }

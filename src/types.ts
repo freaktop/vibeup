@@ -1,17 +1,24 @@
+// Vibe types for nightlife-driven matching
+export type VibeType = 'Party' | 'Chill' | 'Romantic' | 'Wild' | 'Travel';
+export type TonightLookingFor = 'Hookup' | 'Date' | 'Going Out' | 'Friends' | 'Clubbing';
+export type BodyType = 'Slim' | 'Athletic' | 'Average' | 'Muscular' | 'Bear' | 'Dad bod' | 'Prefer not to say';
+export type Role = 'Top' | 'Bottom' | 'Versatile' | 'Side' | 'Prefer not to say';
+
 export interface Profile {
   id: string;
   name: string;
   age: number;
   distance: number;
   photo: string;
-  photos?: string[]; // Multiple photos
+  photos?: string[];
   tags: string[];
   bio?: string;
   lat?: number;
   lng?: number;
   sexualOrientation?: string;
   lookingFor?: string[];
-  hookUpNow?: boolean; // Available for hookup right now
+  into?: string[];
+  hookUpNow?: boolean;
   pronouns?: string;
   genderIdentity?: string;
   kinks?: string[];
@@ -20,7 +27,19 @@ export interface Profile {
   verified?: boolean;
   photoBlurEnabled?: boolean;
   anonymous?: boolean;
-  safeMode?: boolean; // Hide exact location
+  safeMode?: boolean;
+  // Nightlife / Scruff-style depth
+  vibeType?: VibeType;
+  tonightLookingFor?: TonightLookingFor;
+  height?: string;
+  bodyType?: BodyType;
+  role?: Role;
+  instagram?: string;
+  lastActive?: number;
+  online?: boolean;
+  goingOutTonight?: boolean;
+  visibleOnMap?: boolean;
+  ghostMode?: boolean;
 }
 
 export interface Match {
@@ -177,6 +196,7 @@ export interface UserProfile {
   photos: string[];
   sexualOrientation?: string;
   lookingFor?: string[];
+  into?: string[];
   hookUpNow?: boolean;
   pronouns?: string;
   genderIdentity?: string;
@@ -187,6 +207,15 @@ export interface UserProfile {
   photoBlurEnabled?: boolean;
   anonymous?: boolean;
   safeMode?: boolean;
+  vibeType?: VibeType;
+  tonightLookingFor?: TonightLookingFor;
+  height?: string;
+  bodyType?: BodyType;
+  role?: Role;
+  instagram?: string;
+  goingOutTonight?: boolean;
+  visibleOnMap?: boolean;
+  ghostMode?: boolean;
   currentCity?: string;
   isProfileHidden?: boolean;
   nsfwEnabled?: boolean;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../utils/storage';
 import { Event, Location } from '../types';
-import { auth } from '../firebase';
+import { getCurrentUid } from '../auth';
 import { createEvent, listenEvents, listenLocations, setEventRsvp } from '../firestore';
 import { useToast } from '../hooks/useToast';
 import './Events.css';
@@ -26,7 +26,7 @@ export default function Events() {
   const [eventViewMode, setEventViewMode] = useState<EventViewMode>('list');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ type: 'event' | 'place'; data: Event | Location } | null>(null);
-  const userId = auth.currentUser?.uid || 'me';
+  const userId = getCurrentUid() ?? 'me';
 
   useEffect(() => {
     const unsubEvents = listenEvents((rows) => setEvents(rows));

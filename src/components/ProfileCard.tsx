@@ -277,6 +277,12 @@ export default function ProfileCard({
                     : 'Not specified'}
                 </div>
               </div>
+              {profile.into && profile.into.length > 0 && (
+                <div className="profile-details-section">
+                  <div className="profile-details-label">Into:</div>
+                  <div className="profile-details-value">{profile.into.join(', ')}</div>
+                </div>
+              )}
               <div className="profile-details-section">
                 <div className="profile-details-label">Interests:</div>
                 <div className="profile-tags">

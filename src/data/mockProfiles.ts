@@ -10,6 +10,11 @@ const baseProfiles: Profile[] = [
     age: 28,
     distance: 2,
     photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop',
+    online: true,
+    goingOutTonight: true,
+    vibeType: 'Party',
+    tonightLookingFor: 'Going Out',
+    verified: true,
     photos: [
       'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop',
       'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop',
@@ -30,6 +35,10 @@ const baseProfiles: Profile[] = [
     age: 32,
     distance: 5,
     photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=600&fit=crop',
+    online: true,
+    hookUpNow: true,
+    vibeType: 'Wild',
+    tonightLookingFor: 'Hookup',
     photos: [
       'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=600&fit=crop',
       'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=400&h=600&fit=crop',
@@ -42,7 +51,6 @@ const baseProfiles: Profile[] = [
     lng: -74.0080,
     sexualOrientation: 'Gay',
     lookingFor: ['Hookups', 'Fun'],
-    hookUpNow: true,
   },
   {
     id: '3',
@@ -50,6 +58,11 @@ const baseProfiles: Profile[] = [
     age: 26,
     distance: 1,
     photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop',
+    online: true,
+    goingOutTonight: true,
+    vibeType: 'Chill',
+    tonightLookingFor: 'Date',
+    verified: true,
     photos: [
       'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop',
       'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop',

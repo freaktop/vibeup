@@ -2,8 +2,9 @@ import React, { lazy, Suspense, useEffect, useState } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import SplashScreen from './components/SplashScreen';
 import { storage } from './utils/storage';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from './contexts/AuthContext';
 import { auth } from './firebase';
+import { getCurrentUid, isDemoMode } from './auth';
 import { listenNotifications } from './firestore';
 import './App.css';
 
@@ -26,15 +27,15 @@ const Login = lazy(() => import('./screens/Login'));
 const SignUp = lazy(() => import('./screens/SignUp'));
 const Onboarding = lazy(() => import('./screens/Onboarding'));
 
-type Tab = 'discover' | 'vibeup' | 'messages' | 'map' | 'profile' | 'wallfeed' | 'rightnow' | 'events' | 'notifications' | 'settings' | 'whoviewed' | 'communities';
+type Tab = 'grid' | 'vibeup' | 'map' | 'wall' | 'events' | 'outtonight' | 'messages' | 'profile' | 'notifications' | 'settings' | 'whoviewed' | 'communities';
 type View = 'main' | 'chat' | 'onboarding' | 'settings' | 'whoviewed' | 'communities' | 'login' | 'signup' | 'admin';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('discover');
+  const { user, authResolved } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>('grid');
   const [view, setView] = useState<View>('onboarding');
   const [chatProfileId, setChatProfileId] = useState<string | null>(null);
   const [groupChatId, setGroupChatId] = useState<string | null>(null);
-  const [authResolved, setAuthResolved] = useState(false);
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
@@ -42,22 +43,23 @@ function App() {
     const splashTimer = setTimeout(() => {
       setMinSplashDone(true);
     }, 900);
+    return () => clearTimeout(splashTimer);
+  }, []);
 
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        if (storage.isOnboardingComplete()) {
-          setView('main');
-        } else {
-          setView('onboarding');
-        }
+  useEffect(() => {
+    if (!authResolved) return;
+    if (user) {
+      if (storage.isOnboardingComplete()) {
+        setView('main');
       } else {
-        setView('login');
+        setView('onboarding');
       }
+    } else {
+      setView('login');
+    }
+  }, [user, authResolved]);
 
-      setAuthResolved(true);
-    });
-
-    // Listen for custom events
+  useEffect(() => {
     const handleShowSettings = () => setView('settings');
     const handleShowAdmin = () => setView('admin');
     const handleShowWhoViewed = () => setView('whoviewed');
@@ -77,7 +79,8 @@ function App() {
       }
     };
     const handleSwitchTab = (event: any) => {
-      const tab = event.detail?.tab;
+      let tab = event.detail?.tab;
+      if (tab === 'discover') tab = 'grid'; // alias
       if (tab) {
         setActiveTab(tab as Tab);
       }
@@ -85,7 +88,7 @@ function App() {
     const handleRightNowToggle = (event: any) => {
       const { isActive } = event.detail;
       if (isActive) {
-        setActiveTab('rightnow'); // Switch to Right Now tab
+        setActiveTab('outtonight');
       }
     };
 
@@ -99,8 +102,6 @@ function App() {
     window.addEventListener('rightNowToggle', handleRightNowToggle as EventListener);
 
     return () => {
-      clearTimeout(splashTimer);
-      unsub();
       window.removeEventListener('showSettings', handleShowSettings);
       window.removeEventListener('showAdmin', handleShowAdmin);
       window.removeEventListener('showWhoViewed', handleShowWhoViewed);
@@ -115,8 +116,8 @@ function App() {
   useEffect(() => {
     if (!authResolved) return;
 
-    const uid = auth.currentUser?.uid;
-    if (!uid) {
+    const uid = getCurrentUid();
+    if (!uid || isDemoMode()) {
       setUnreadNotifications(0);
       return;
     }
@@ -295,14 +296,14 @@ function App() {
       <div className="app">
       <div className="header">
         <h1 className="header-title">
-          {activeTab === 'discover' && 'Discover'}
+          {activeTab === 'grid' && 'Grid'}
           {activeTab === 'vibeup' && 'VibeUp'}
-          {activeTab === 'messages' && 'Messages'}
           {activeTab === 'map' && 'Map'}
-          {activeTab === 'profile' && 'My Profile'}
-          {activeTab === 'wallfeed' && 'Wall Feed'}
-          {activeTab === 'rightnow' && 'Right Now'}
-          {activeTab === 'events' && 'Vibes'}
+          {activeTab === 'wall' && 'Wall'}
+          {activeTab === 'events' && 'Events'}
+          {activeTab === 'outtonight' && 'Out Tonight'}
+          {activeTab === 'messages' && 'Messages'}
+          {activeTab === 'profile' && 'Profile'}
           {activeTab === 'notifications' && 'Notifications'}
         </h1>
         {activeTab !== 'notifications' && (
@@ -320,32 +321,60 @@ function App() {
 
       <div className="content">
         <Suspense fallback={<SplashScreen />}>
-          {activeTab === 'discover' && <Discover />}
+          {activeTab === 'grid' && <Discover />}
           {activeTab === 'vibeup' && <VibeUp />}
-          {activeTab === 'messages' && <Messages onOpenChat={openChat} onOpenGroupChat={openGroupChat} />}
           {activeTab === 'map' && <Map />}
-          {activeTab === 'profile' && <Profile />}
-          {activeTab === 'wallfeed' && <WallFeed />}
-          {activeTab === 'rightnow' && <RightNow />}
+          {activeTab === 'wall' && <WallFeed />}
           {activeTab === 'events' && <Events />}
+          {activeTab === 'outtonight' && <RightNow />}
+          {activeTab === 'messages' && <Messages onOpenChat={openChat} onOpenGroupChat={openGroupChat} />}
+          {activeTab === 'profile' && <Profile />}
           {activeTab === 'notifications' && <Notifications />}
         </Suspense>
       </div>
 
       <div className="tab-bar">
         <button
-          className={`tab ${activeTab === 'discover' ? 'active' : ''}`}
-          onClick={() => setActiveTab('discover')}
+          className={`tab ${activeTab === 'grid' ? 'active' : ''}`}
+          onClick={() => setActiveTab('grid')}
         >
-          <span className="tab-icon">🧭</span>
-          <span className="tab-label">Discover</span>
+          <span className="tab-icon">▦</span>
+          <span className="tab-label">Grid</span>
         </button>
         <button
           className={`tab ${activeTab === 'vibeup' ? 'active' : ''}`}
           onClick={() => setActiveTab('vibeup')}
         >
-          <span className="tab-icon">💚</span>
+          <span className="tab-icon">❤️</span>
           <span className="tab-label">VibeUp</span>
+        </button>
+        <button
+          className={`tab ${activeTab === 'map' ? 'active' : ''}`}
+          onClick={() => setActiveTab('map')}
+        >
+          <span className="tab-icon">📍</span>
+          <span className="tab-label">Map</span>
+        </button>
+        <button
+          className={`tab ${activeTab === 'wall' ? 'active' : ''}`}
+          onClick={() => setActiveTab('wall')}
+        >
+          <span className="tab-icon">📋</span>
+          <span className="tab-label">Wall</span>
+        </button>
+        <button
+          className={`tab ${activeTab === 'events' ? 'active' : ''}`}
+          onClick={() => setActiveTab('events')}
+        >
+          <span className="tab-icon">🎪</span>
+          <span className="tab-label">Events</span>
+        </button>
+        <button
+          className={`tab ${activeTab === 'outtonight' ? 'active' : ''}`}
+          onClick={() => setActiveTab('outtonight')}
+        >
+          <span className="tab-icon">🌙</span>
+          <span className="tab-label">Out Tonight</span>
         </button>
         <button
           className={`tab ${activeTab === 'messages' ? 'active' : ''}`}
@@ -355,39 +384,11 @@ function App() {
           <span className="tab-label">Messages</span>
         </button>
         <button
-          className={`tab ${activeTab === 'map' ? 'active' : ''}`}
-          onClick={() => setActiveTab('map')}
-        >
-          <span className="tab-icon">🗺️</span>
-          <span className="tab-label">Map</span>
-        </button>
-        <button
           className={`tab ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => setActiveTab('profile')}
         >
           <span className="tab-icon">👤</span>
           <span className="tab-label">Profile</span>
-        </button>
-        <button
-          className={`tab ${activeTab === 'wallfeed' ? 'active' : ''}`}
-          onClick={() => setActiveTab('wallfeed')}
-        >
-          <span className="tab-icon">📰</span>
-          <span className="tab-label">Wall</span>
-        </button>
-        <button
-          className={`tab ${activeTab === 'rightnow' ? 'active' : ''}`}
-          onClick={() => setActiveTab('rightnow')}
-        >
-          <span className="tab-icon">🔥</span>
-          <span className="tab-label">Right Now</span>
-        </button>
-        <button
-          className={`tab ${activeTab === 'events' ? 'active' : ''}`}
-          onClick={() => setActiveTab('events')}
-        >
-          <span className="tab-icon">📅</span>
-          <span className="tab-label">Vibes</span>
         </button>
       </div>
       </div>

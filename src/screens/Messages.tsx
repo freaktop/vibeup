@@ -5,6 +5,7 @@ import ErrorMessage from '../components/ErrorMessage';
 import { Message } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
+import { getCurrentUid } from '../auth';
 import { createRoom, listenMatches, listenMyRooms, listenProfiles, type Room } from '../firestore';
 import type { Profile } from '../types';
 import { useToast } from '../hooks/useToast';
@@ -71,7 +72,7 @@ export default function Messages({ onOpenChat, onOpenGroupChat }: MessagesProps)
     setError(null);
 
     try {
-      const uid = auth.currentUser?.uid;
+      const uid = getCurrentUid();
       if (!uid) {
         setMessages([]);
         setIsLoading(false);
@@ -143,7 +144,7 @@ export default function Messages({ onOpenChat, onOpenGroupChat }: MessagesProps)
     return <Loading message="Loading messages..." fullScreen />;
   }
 
-  const uid = auth.currentUser?.uid;
+  const uid = getCurrentUid();
   const profileById = new Map(allProfiles.map((p) => [p.id, p] as const));
   const directChatProfiles: Profile[] = uid
     ? matchRows

@@ -43,10 +43,8 @@ export default defineConfig({
     open: true,
     https: false,
     headers: {
-      // Allows Firebase Auth popup flow to close without COOP blocking
-      // (still safe for dev)
-      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
-      'Cross-Origin-Embedder-Policy': 'unsafe-none',
+      // No COOP in dev - COOP blocks Firebase popup's window.closed/close calls
+      // (prod uses same-origin-allow-popups in vercel.json / netlify.toml)
     },
   },
   build: {

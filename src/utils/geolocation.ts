@@ -1,4 +1,6 @@
+import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
+import { usCities } from '../data/cities';
 import { logger } from './logger';
 
 export interface Location {
@@ -8,41 +10,56 @@ export interface Location {
 }
 
 /**
- * Get user's current location
+ * Get user's current location (works on web and native)
  */
 export async function getCurrentLocation(): Promise<Location | null> {
   try {
-    const position = await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: 10000,
-    });
+    if (Capacitor.isNativePlatform()) {
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 10000,
+      });
+      return {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy || undefined,
+      };
+    }
 
-    return {
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-      accuracy: position.coords.accuracy || undefined,
-    };
+    // Web: use navigator.geolocation
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        logger.warn('Geolocation not supported');
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy || undefined,
+          }),
+        (err) => {
+          logger.warn('Geolocation error:', err.message);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      );
+    });
   } catch (error: any) {
     logger.error('Error getting location:', error);
-    
-    // Return default location (NYC) if permission denied or unavailable
-    if (error.code === 1) {
-      logger.warn('Location permission denied. Using default location.');
-    }
-    
-    return {
-      latitude: 40.7128, // NYC default
-      longitude: -74.0060,
-    };
+    return null;
   }
 }
 
 /**
- * Watch user's location (for real-time updates)
+ * Watch user's location (for real-time updates) - native only
  */
 export async function watchLocation(
   callback: (location: Location) => void
 ): Promise<string | null> {
+  if (!Capacitor.isNativePlatform()) return null;
   try {
     const watchId = await Geolocation.watchPosition(
       {
@@ -89,4 +106,48 @@ export function calculateDistance(
 
 function toRad(degrees: number): number {
   return (degrees * Math.PI) / 180;
+}
+
+/**
+ * Get lat/lng for a city string like "New York, NY" or "Chicago, IL"
+ */
+export function getCityCoords(cityStr: string | undefined): { lat: number; lng: number } | null {
+  if (!cityStr || cityStr === 'Near Me') return null;
+  const parts = cityStr.split(',').map((s) => s.trim());
+  const cityName = parts[0];
+  const state = parts[1]?.toUpperCase() || '';
+  const { usCities } = require('../data/cities');
+  const match = usCities.find(
+    (c) =>
+      c.name.toLowerCase() === cityName?.toLowerCase() && (!state || c.state === state),
+  );
+  return match ? { lat: match.lat, lng: match.lng } : null;
+}
+
+/**
+ * Enrich profiles with distance from user location (uses currentCity for profile coords)
+ */
+export async function enrichProfilesWithDistance<T extends { currentCity?: string; lat?: number; lng?: number; distance?: number }>(
+  profiles: T[],
+): Promise<T[]> {
+  const userLoc = await getCurrentLocation();
+  if (!userLoc) return profiles;
+
+  return profiles.map((p) => {
+    let lat: number | undefined;
+    let lng: number | undefined;
+    if (p.lat != null && p.lng != null) {
+      lat = p.lat;
+      lng = p.lng;
+    } else {
+      const coords = getCityCoords(p.currentCity);
+      if (coords) {
+        lat = coords.lat;
+        lng = coords.lng;
+      }
+    }
+    if (lat == null || lng == null) return p;
+    const distance = calculateDistance(userLoc.latitude, userLoc.longitude, lat, lng);
+    return { ...p, distance: Math.round(distance * 10) / 10 };
+  });
 }

@@ -5,6 +5,9 @@ import Loading from '../components/Loading';
 import ErrorMessage from '../components/ErrorMessage';
 import { storage } from '../utils/storage';
 import { runPremiumPurchase } from '../utils/premiumPurchase';
+import { getCurrentUid, isDemoMode } from '../auth';
+import { getProfile, upsertMyProfile } from '../firestore';
+import { uploadProfilePhoto } from '../utils/uploadImage';
 import { usCities } from '../data/cities';
 import { useToast } from '../hooks/useToast';
 import './Profile.css';
@@ -18,8 +21,16 @@ export default function Profile() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [sexualOrientation, setSexualOrientation] = useState('Gay');
   const [lookingFor, setLookingFor] = useState<string[]>([]);
+  const [into, setInto] = useState<string[]>([]);
   const [intent, setIntent] = useState('Just Browsing');
   const [vibeStyle, setVibeStyle] = useState('Chill');
+  const [vibeType, setVibeType] = useState<string>('Chill');
+  const [tonightLookingFor, setTonightLookingFor] = useState<string>('');
+  const [height, setHeight] = useState('');
+  const [bodyType, setBodyType] = useState<string>('');
+  const [role, setRole] = useState<string>('');
+  const [instagram, setInstagram] = useState('');
+  const [goingOutTonight, setGoingOutTonight] = useState(false);
   const [hookUpNow, setHookUpNow] = useState(false);
   const [pronouns, setPronouns] = useState('He/Him');
   const [genderIdentity, setGenderIdentity] = useState('Man');
@@ -35,7 +46,7 @@ export default function Profile() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState('');
   const [premiumFeatures, setPremiumFeatures] = useState(storage.getPremiumFeatures());
-  const [currentCity, setCurrentCity] = useState('New York, NY');
+  const [currentCity, setCurrentCity] = useState('');
   const [isProfileHidden, setIsProfileHidden] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -46,9 +57,14 @@ export default function Profile() {
   const [newKink, setNewKink] = useState('');
   const [showCityModal, setShowCityModal] = useState(false);
   const [citySearch, setCitySearch] = useState('');
+  const [cityModalFromNavigate, setCityModalFromNavigate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const intentOptions = ['Friends', 'Events', 'Dating', 'Just Browsing'];
-  const vibeOptions = ['Chill', 'Wild', 'Dom', 'Sub', 'Artistic', 'Techie'];
+  const intentOptions = ['Friends', 'Events', 'Dating', 'Just Browsing', 'Hookups', 'Clubbing'];
+  const vibeOptions = ['Party', 'Chill', 'Romantic', 'Wild', 'Travel'];
+  const tonightOptions = ['Hookup', 'Date', 'Going Out', 'Friends', 'Clubbing'];
+  const bodyTypeOptions = ['Slim', 'Athletic', 'Average', 'Muscular', 'Bear', 'Dad bod', 'Prefer not to say'];
+  const roleOptions = ['Top', 'Bottom', 'Versatile', 'Side', 'Prefer not to say'];
+  const intoOptions = ['Men', 'Women', 'Trans', 'Non-binary', 'Everyone'];
 
   useEffect(() => {
     loadProfile();
@@ -59,10 +75,52 @@ export default function Profile() {
     setError(null);
     
     try {
-      // Simulate loading delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      let profile = storage.getUserProfile() || {};
       
-      const profile = storage.getUserProfile();
+      // Load from Firestore for real users (source of truth)
+      if (!isDemoMode()) {
+        const uid = getCurrentUid();
+        if (uid) {
+          const firestoreProfile = await getProfile(uid);
+          if (firestoreProfile) {
+            profile = {
+              ...profile,
+              name: firestoreProfile.name || profile?.name,
+              age: firestoreProfile.age?.toString() ?? profile?.age?.toString(),
+              bio: firestoreProfile.bio ?? profile?.bio,
+              interests: firestoreProfile.tags ?? profile?.interests ?? [],
+              photos: firestoreProfile.photos ?? profile?.photos ?? [],
+              sexualOrientation: firestoreProfile.sexualOrientation ?? profile?.sexualOrientation,
+              lookingFor: firestoreProfile.lookingFor ?? profile?.lookingFor ?? [],
+              into: (firestoreProfile as any).into ?? profile?.into ?? [],
+              intent: firestoreProfile.intent ?? profile?.intent,
+              vibeStyle: firestoreProfile.vibeStyle ?? profile?.vibeStyle,
+              vibeType: firestoreProfile.vibeType ?? profile?.vibeType,
+              tonightLookingFor: firestoreProfile.tonightLookingFor ?? profile?.tonightLookingFor,
+              height: firestoreProfile.height ?? profile?.height,
+              bodyType: firestoreProfile.bodyType ?? profile?.bodyType,
+              role: firestoreProfile.role ?? profile?.role,
+              instagram: firestoreProfile.instagram ?? profile?.instagram,
+              goingOutTonight: firestoreProfile.goingOutTonight ?? profile?.goingOutTonight,
+              hookUpNow: firestoreProfile.hookUpNow ?? profile?.hookUpNow,
+              pronouns: firestoreProfile.pronouns ?? profile?.pronouns,
+              genderIdentity: firestoreProfile.genderIdentity ?? profile?.genderIdentity,
+              kinks: firestoreProfile.kinks ?? profile?.kinks ?? [],
+              photoBlurEnabled: firestoreProfile.photoBlurEnabled ?? profile?.photoBlurEnabled,
+              verified: firestoreProfile.verified ?? profile?.verified,
+              anonymous: firestoreProfile.anonymous ?? profile?.anonymous,
+              safeMode: firestoreProfile.safeMode ?? profile?.safeMode,
+              nsfwEnabled: (firestoreProfile as any).nsfwEnabled ?? profile?.nsfwEnabled,
+              photoRulesAccepted: (firestoreProfile as any).photoRulesAccepted ?? profile?.photoRulesAccepted,
+              allowBlurredBody: (firestoreProfile as any).allowBlurredBody ?? profile?.allowBlurredBody,
+              currentCity: (firestoreProfile as any).currentCity ?? profile?.currentCity,
+              isProfileHidden: (firestoreProfile as any).isProfileHidden ?? profile?.isProfileHidden,
+            };
+            storage.saveUserProfile(profile);
+          }
+        }
+      }
+      
       if (profile) {
         setName(profile.name || 'You');
         setAge(profile.age?.toString() || '');
@@ -71,8 +129,16 @@ export default function Profile() {
         setPhotos(profile.photos || []);
         setSexualOrientation(profile.sexualOrientation || 'Gay');
         setLookingFor(profile.lookingFor || []);
+        setInto(profile.into || []);
         setIntent(profile.intent || 'Just Browsing');
         setVibeStyle(profile.vibeStyle || 'Chill');
+        setVibeType(profile.vibeType || profile.vibeStyle || 'Chill');
+        setTonightLookingFor(profile.tonightLookingFor || '');
+        setHeight(profile.height || '');
+        setBodyType(profile.bodyType || '');
+        setRole(profile.role || '');
+        setInstagram(profile.instagram || '');
+        setGoingOutTonight(profile.goingOutTonight || false);
         setHookUpNow(profile.hookUpNow || false);
         setCurrentCity(normalizeCityName(profile.currentCity));
         setIsProfileHidden(profile.isProfileHidden || false);
@@ -95,38 +161,30 @@ export default function Profile() {
     }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       setError('Please upload an image file (JPG, PNG, etc.)');
       return;
     }
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    const maxSize = 5 * 1024 * 1024; // 5MB
     if (file.size > maxSize) {
       setError('Image size must be less than 5MB. Please compress your image.');
       return;
     }
 
     try {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const photoUrl = reader.result as string;
-        setPhotos([...photos, photoUrl]);
-        setError(null);
-      };
-      reader.onerror = () => {
-        setError('Failed to load image. Please try again.');
-      };
-      reader.readAsDataURL(file);
+      setError(null);
+      const photoUrl = await uploadProfilePhoto(file);
+      setPhotos((prev) => [...prev, photoUrl]);
     } catch (err) {
       console.error('Error uploading photo:', err);
       setError('Failed to upload photo. Please try again.');
     }
+    e.target.value = '';
   };
 
   const removePhoto = (index: number) => {
@@ -150,6 +208,11 @@ export default function Profile() {
       return;
     }
 
+    if (!currentCity || currentCity.trim() === '') {
+      setError('Please choose your location');
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
 
@@ -162,8 +225,16 @@ export default function Profile() {
         photos, 
         sexualOrientation, 
         lookingFor, 
+        into,
         intent,
         vibeStyle,
+        vibeType,
+        tonightLookingFor: tonightLookingFor || undefined,
+        height: height || undefined,
+        bodyType: bodyType || undefined,
+        role: role || undefined,
+        instagram: instagram || undefined,
+        goingOutTonight,
         hookUpNow,
         currentCity,
         isProfileHidden,
@@ -181,12 +252,26 @@ export default function Profile() {
       
       storage.saveUserProfile(profile);
       
-      // Simulate save delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Sync to Firestore so profile is visible to others
+      if (!isDemoMode()) {
+        try {
+          await upsertMyProfile({
+            ...profile,
+            age: profile.age?.toString?.() ?? String(profile.age),
+          });
+          showToast('Profile saved and synced to cloud!', 'success');
+        } catch (err) {
+          console.error('Failed to sync profile to cloud:', err);
+          showToast('Saved locally. Sync to cloud failed – try again.', 'error');
+          setIsSaving(false);
+          return;
+        }
+      } else {
+        showToast('Saved locally. Sign in with email/Google to sync to Firebase.', 'info');
+      }
       
       setIsEditing(false);
       setIsSaving(false);
-      showToast('Profile updated successfully!', 'success');
       
       // Force ProfileCompletion to re-render by triggering a state update
       window.dispatchEvent(new CustomEvent('profileUpdated'));
@@ -250,7 +335,7 @@ export default function Profile() {
   };
 
   const normalizeCityName = (city?: string) => {
-    if (!city) return 'New York, NY';
+    if (!city) return '';
     if (city === 'Near Me') return city;
     if (city.includes(',')) return city;
 
@@ -264,6 +349,13 @@ export default function Profile() {
 
   const handleNavigateCity = () => {
     setCitySearch('');
+    setCityModalFromNavigate(true);
+    setShowCityModal(true);
+  };
+
+  const handleChooseLocation = () => {
+    setCitySearch('');
+    setCityModalFromNavigate(false);
     setShowCityModal(true);
   };
 
@@ -291,12 +383,15 @@ export default function Profile() {
     const updatedProfile = { ...profile, currentCity: selectedCity };
     storage.saveUserProfile(updatedProfile);
 
-    window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'map' } }));
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('changeMapLocation', { detail: { city: selectedCity } }));
-    }, 500);
-
-    showToast(`Location changed to ${selectedCity}. Opening Map...`, 'success');
+    if (cityModalFromNavigate) {
+      window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'map' } }));
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('changeMapLocation', { detail: { city: selectedCity } }));
+      }, 500);
+      showToast(`Location changed to ${selectedCity}. Opening Map...`, 'success');
+    } else {
+      showToast(`Location set to ${selectedCity}. Tap Save to update your profile.`, 'success');
+    }
     setShowCityModal(false);
   };
 
@@ -348,6 +443,11 @@ export default function Profile() {
         />
       )}
       <ProfileCompletion />
+      {isDemoMode() && (
+        <div className="profile-demo-banner">
+          Demo mode – profile saved locally only. Sign out and sign in with email or Google to sync to Firebase.
+        </div>
+      )}
       <div className="profile-header">
         <div className="profile-photos-section">
           {photos.length > 0 ? (
@@ -421,21 +521,56 @@ export default function Profile() {
         </div>
 
         <div className="profile-section">
-          <label className="profile-label">Vibe Style</label>
+          <label className="profile-label">Vibe Type</label>
           {isEditing ? (
             <div className="profile-looking-for-options">
               {vibeOptions.map((option) => (
                 <button
                   key={option}
-                  className={`profile-looking-for-btn ${vibeStyle === option ? 'active' : ''}`}
-                  onClick={() => setVibeStyle(option)}
+                  className={`profile-looking-for-btn ${vibeType === option ? 'active' : ''}`}
+                  onClick={() => setVibeType(option)}
                 >
                   {option}
                 </button>
               ))}
             </div>
           ) : (
-            <div className="profile-value">{vibeStyle || 'Not specified'}</div>
+            <div className="profile-value">{vibeType || 'Not specified'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">Tonight I'm looking for</label>
+          {isEditing ? (
+            <div className="profile-looking-for-options">
+              {tonightOptions.map((option) => (
+                <button
+                  key={option}
+                  className={`profile-looking-for-btn ${tonightLookingFor === option ? 'active' : ''}`}
+                  onClick={() => setTonightLookingFor(tonightLookingFor === option ? '' : option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="profile-value">{tonightLookingFor || 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">Going Out Tonight</label>
+          {isEditing ? (
+            <div className="profile-toggle">
+              <button
+                className={`toggle-btn ${goingOutTonight ? 'active' : ''}`}
+                onClick={() => setGoingOutTonight(!goingOutTonight)}
+              >
+                {goingOutTonight ? '🌙 Yes' : 'No'}
+              </button>
+            </div>
+          ) : (
+            <div className="profile-value">{goingOutTonight ? '🌙 Going out tonight' : 'Not going out'}</div>
           )}
         </div>
         <div className="profile-section">
@@ -468,8 +603,84 @@ export default function Profile() {
         </div>
 
         <div className="profile-section">
+          <label className="profile-label">Height</label>
+          {isEditing ? (
+            <input
+              className="profile-input"
+              value={height}
+              onChange={(e) => setHeight(e.target.value)}
+              placeholder="e.g. 5'10&quot;"
+            />
+          ) : (
+            <div className="profile-value">{height || 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">Body Type</label>
+          {isEditing ? (
+            <div className="profile-looking-for-options">
+              {bodyTypeOptions.map((option) => (
+                <button
+                  key={option}
+                  className={`profile-looking-for-btn ${bodyType === option ? 'active' : ''}`}
+                  onClick={() => setBodyType(bodyType === option ? '' : option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="profile-value">{bodyType || 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">Role</label>
+          {isEditing ? (
+            <div className="profile-looking-for-options">
+              {roleOptions.map((option) => (
+                <button
+                  key={option}
+                  className={`profile-looking-for-btn ${role === option ? 'active' : ''}`}
+                  onClick={() => setRole(role === option ? '' : option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="profile-value">{role || 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">Instagram</label>
+          {isEditing ? (
+            <input
+              className="profile-input"
+              value={instagram}
+              onChange={(e) => setInstagram(e.target.value)}
+              placeholder="@username"
+            />
+          ) : (
+            <div className="profile-value">{instagram ? (instagram.startsWith('@') ? instagram : `@${instagram}`) : 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
           <label className="profile-label">Location</label>
-          <div className="profile-value">{currentCity}</div>
+          <div className="profile-value">
+            {currentCity || 'Not set – tap to choose'}
+          </div>
+          <button
+            type="button"
+            className="auth-link"
+            style={{ marginTop: 4, display: 'block' }}
+            onClick={handleChooseLocation}
+          >
+            {currentCity ? 'Change location' : 'Choose your location'}
+          </button>
         </div>
 
         <div className="profile-section">
@@ -508,6 +719,32 @@ export default function Profile() {
           ) : (
             <div className="profile-value">
               {lookingFor.length > 0 ? lookingFor.join(', ') : 'Not specified'}
+            </div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">Into</label>
+          <span className="profile-hint">Who you're attracted to</span>
+          {isEditing ? (
+            <div className="profile-looking-for-options">
+              {intoOptions.map((option) => (
+                <button
+                  key={option}
+                  className={`profile-looking-for-btn ${into.includes(option) ? 'active' : ''}`}
+                  onClick={() => {
+                    setInto(prev =>
+                      prev.includes(option) ? prev.filter((x) => x !== option) : [...prev, option]
+                    );
+                  }}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="profile-value">
+              {into.length > 0 ? into.join(', ') : 'Not specified'}
             </div>
           )}
         </div>

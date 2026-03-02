@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Notification } from '../types';
-import { auth } from '../firebase';
+import { getCurrentUid } from '../auth';
 import { listenNotifications, markAllNotificationsRead, markNotificationRead } from '../firestore';
 import './Notifications.css';
 
@@ -9,7 +9,7 @@ export default function Notifications() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) {
       setNotifications([]);
       return;
@@ -23,7 +23,7 @@ export default function Notifications() {
   }, []);
 
   const markAsRead = (id: string) => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (uid) {
       markNotificationRead(uid, id).catch(() => null);
     }
@@ -33,7 +33,7 @@ export default function Notifications() {
   };
 
   const markAllAsRead = () => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (uid) {
       markAllNotificationsRead(uid).catch(() => null);
     }
@@ -110,27 +110,18 @@ export default function Notifications() {
                 if (!notification.read) {
                   markAsRead(notification.id);
                 }
-                // Handle different notification types
-                if (notification.type === 'message' && notification.actionUrl) {
-                  // Open chat
-                  const profileId = notification.actionUrl.split('/').pop();
-                  if (profileId) {
-                    window.dispatchEvent(new CustomEvent('openChat', { detail: { profileId } }));
-                    window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'messages' } }));
-                  }
-                } else if (notification.type === 'match' && notification.actionUrl) {
-                  // Open messages tab
+                if (notification.type === 'message' && notification.profileId) {
+                  window.dispatchEvent(new CustomEvent('openChat', { detail: { profileId: notification.profileId } }));
                   window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'messages' } }));
-                } else if (notification.type === 'event' && notification.actionUrl) {
-                  // Open events tab
+                } else if (notification.type === 'match' && notification.profileId) {
+                  window.dispatchEvent(new CustomEvent('openChat', { detail: { profileId: notification.profileId } }));
+                  window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'messages' } }));
+                } else if (notification.type === 'like' && notification.profileId) {
+                  window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'vibeup' } }));
+                } else if (notification.type === 'event' || notification.type === 'rsvp') {
                   window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'events' } }));
-                } else if (notification.actionUrl) {
-                  // Generic navigation
-                  const url = notification.actionUrl;
-                  if (url.startsWith('/')) {
-                    // Could implement router navigation here
-                    console.log('Navigate to:', url);
-                  }
+                } else if (notification.type === 'comment') {
+                  window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'wall' } }));
                 }
               }}
             >

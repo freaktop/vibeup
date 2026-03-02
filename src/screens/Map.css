@@ -140,6 +140,7 @@
 .map-explore-btn,
 .map-cruise-btn,
 .map-sneaky-btn,
+.map-whosout-btn,
 .map-search-btn {
   background: rgba(255, 255, 255, 0.95);
   color: #333;
@@ -161,6 +162,7 @@
 .map-explore-btn:hover,
 .map-cruise-btn:hover,
 .map-sneaky-btn:hover,
+.map-whosout-btn:hover,
 .map-search-btn:hover {
   background: #fff;
   transform: translateY(-1px);
@@ -207,6 +209,20 @@
 .map-sneaky-btn.active {
   background: linear-gradient(135deg, #cc0000 0%, #ff4444 100%);
   box-shadow: 0 2px 12px rgba(255, 68, 68, 0.5);
+}
+
+.map-whosout-btn {
+  background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+  color: #fff;
+}
+
+.map-whosout-btn:hover {
+  background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%);
+}
+
+.map-whosout-btn.active {
+  background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
+  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.5);
 }
 
 .map-nearme-btn {

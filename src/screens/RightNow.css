@@ -18,6 +18,69 @@
   color: #999;
 }
 
+.rightnow-events {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--bg-card, #16161f);
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+}
+
+.rightnow-events-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin: 0 0 12px 0;
+}
+
+.rightnow-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rightnow-event-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: var(--bg-elevated, #1c1c28);
+  border-radius: 10px;
+}
+
+.rightnow-event-info {
+  flex: 1;
+}
+
+.rightnow-event-name {
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin-bottom: 4px;
+}
+
+.rightnow-event-location,
+.rightnow-event-time {
+  font-size: 12px;
+  color: var(--text-secondary, #a1a1aa);
+}
+
+.rsvp-btn {
+  background: var(--accent-primary, #ff2d95);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rsvp-going {
+  font-size: 13px;
+  color: var(--accent-secondary, #00d4aa);
+  font-weight: 600;
+}
+
 .rightnow-header {
   display: flex;
   justify-content: space-between;

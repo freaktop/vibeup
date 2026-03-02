@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
 import { useToast } from '../hooks/useToast';
 import { auth } from '../firebase';
+import { getCurrentUid } from '../auth';
 import { listenRoom, listenRoomMessages, sendRoomMessage, updateRoomMeta } from '../firestore';
 import './GroupChat.css';
 
@@ -58,7 +59,7 @@ export default function GroupChat({ groupId, groupName, groupMembers }: GroupCha
   };
 
   const sendMessage = async () => {
-    const uid = auth.currentUser?.uid;
+    const uid = getCurrentUid();
     if (!uid) {
       showToast('Please sign in first.', 'error');
       return;
@@ -172,9 +173,9 @@ export default function GroupChat({ groupId, groupName, groupMembers }: GroupCha
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`groupchat-message ${message.senderId === (auth.currentUser?.uid || 'me') ? 'sent' : 'received'}`}
+            className={`groupchat-message ${message.senderId === (getCurrentUid() || 'me') ? 'sent' : 'received'}`}
           >
-            {message.senderId !== (auth.currentUser?.uid || 'me') && (
+            {message.senderId !== (getCurrentUid() || 'me') && (
               <div className="message-sender">{message.senderId}</div>
             )}
             <div className="groupchat-message-bubble">
