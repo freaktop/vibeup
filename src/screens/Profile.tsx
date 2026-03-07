@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import PremiumModal from '../components/PremiumModal';
 import ProfileCompletion from '../components/ProfileCompletion';
+import SafeImage from '../components/SafeImage';
 import Loading from '../components/Loading';
 import ErrorMessage from '../components/ErrorMessage';
 import { storage } from '../utils/storage';
 import { runPremiumPurchase } from '../utils/premiumPurchase';
 import { getCurrentUid, isDemoMode } from '../auth';
+import { usePremiumContext } from '../contexts/PremiumContext';
 import { getProfile, upsertMyProfile } from '../firestore';
 import { uploadProfilePhoto } from '../utils/uploadImage';
 import { usCities } from '../data/cities';
@@ -45,7 +47,7 @@ export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState('');
-  const [premiumFeatures, setPremiumFeatures] = useState(storage.getPremiumFeatures());
+  const premiumFeatures = usePremiumContext();
   const [currentCity, setCurrentCity] = useState('');
   const [isProfileHidden, setIsProfileHidden] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -204,7 +206,12 @@ export default function Profile() {
     }
 
     if (photos.length === 0) {
-      setError('Please add at least one photo to your profile');
+      setError('Please add at least one photo. Your first photo must be a clear face picture.');
+      return;
+    }
+
+    if (!photoRulesAccepted) {
+      setError('Please accept the photo rules. Your first photo must be a clear face picture.');
       return;
     }
 
@@ -402,6 +409,12 @@ export default function Profile() {
       setShowPremiumModal(false);
       return;
     }
+    // Web: opening Stripe link - do NOT grant premium. Webhook → Firestore will update when paid.
+    if ((purchase as { webOpened?: boolean }).webOpened) {
+      showToast(purchase.message || 'Complete checkout in the new tab. Premium activates when payment is confirmed.', 'info');
+      setShowPremiumModal(false);
+      return;
+    }
 
     let updated = { ...premiumFeatures };
     
@@ -417,7 +430,6 @@ export default function Profile() {
       };
     }
     
-    setPremiumFeatures(updated);
     storage.savePremiumFeatures(updated);
     showToast(`Thank you for your purchase! ${feature} has been activated.`, 'success');
     setShowPremiumModal(false);
@@ -426,7 +438,7 @@ export default function Profile() {
   const filteredCities = usCities
     .map((city) => `${city.name}, ${city.state}`)
     .filter((cityLabel) => cityLabel.toLowerCase().includes(citySearch.toLowerCase()))
-    .slice(0, 25);
+    .slice(0, 50);
 
   if (isLoading) {
     return <Loading message="Loading profile..." fullScreen />;
@@ -451,10 +463,12 @@ export default function Profile() {
       <div className="profile-header">
         <div className="profile-photos-section">
           {photos.length > 0 ? (
+            <>
+            <div className="profile-photo-face-hint">First photo: clear face picture</div>
             <div className="profile-photos-grid">
               {photos.map((photo, index) => (
                 <div key={index} className="profile-photo-item">
-                  <img src={photo} alt={`Photo ${index + 1}`} className="profile-photo" />
+                  <SafeImage src={photo} alt={`Photo ${index + 1}`} className="profile-photo" />
                   {isEditing && (
                     <button
                       className="profile-remove-photo"
@@ -466,10 +480,12 @@ export default function Profile() {
                 </div>
               ))}
             </div>
+            </>
           ) : (
             <div className="profile-photo-placeholder">
               <div className="placeholder-icon">📷</div>
               <div className="placeholder-text">Add at least one photo</div>
+              <div className="placeholder-hint">First photo must be a clear face picture</div>
             </div>
           )}
           {isEditing && (
@@ -988,7 +1004,7 @@ export default function Profile() {
               <span>👑</span>
               <div>
                 <div className="premium-feature-title">VibeUp Premium</div>
-                <div className="premium-feature-desc">Unlimited likes, Super Likes & more</div>
+                <div className="premium-feature-desc">$9.99/mo · Who viewed you, unlimited likes & more</div>
               </div>
               <span>→</span>
             </button>

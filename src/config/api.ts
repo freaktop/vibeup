@@ -17,6 +17,8 @@ export const config = {
   stripe: {
     paymentLinkUrl: import.meta.env.VITE_STRIPE_PAYMENT_LINK_URL || '',
   },
+  /** Your profile ID - new users auto-follow you so you can mass-message them */
+  ownerProfileId: import.meta.env.VITE_OWNER_PROFILE_ID || '',
 };
 
 // Validate required config

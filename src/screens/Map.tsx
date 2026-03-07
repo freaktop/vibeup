@@ -3,13 +3,16 @@ import ProfileCard from '../components/ProfileCard';
 import MapView from '../components/MapView';
 import Loading from '../components/Loading';
 import ErrorMessage from '../components/ErrorMessage';
+import ErrorBoundary from '../components/ErrorBoundary';
 import ActionSheetModal from '../components/ActionSheetModal';
 import ReportModal from '../components/ReportModal';
 import { usCities } from '../data/cities';
+import { normalizeProfile } from '../utils/normalizeProfile';
 import { storage } from '../utils/storage';
 import { shareProfile } from '../utils/shareProfile';
-import { getCurrentLocation, calculateDistance } from '../utils/geolocation';
+import { getCurrentLocationWithError, calculateDistance, getCityCoords } from '../utils/geolocation';
 import { useToast } from '../hooks/useToast';
+import { usePremiumContext } from '../contexts/PremiumContext';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
@@ -22,7 +25,7 @@ export default function Map() {
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [likedProfiles, setLikedProfiles] = useState<string[]>([]);
   const [blockedProfiles, setBlockedProfiles] = useState<string[]>([]);
-  const [premiumFeatures] = useState(storage.getPremiumFeatures());
+  const premiumFeatures = usePremiumContext();
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchLocation, setSearchLocation] = useState<string>('Near Me');
@@ -91,7 +94,12 @@ export default function Map() {
 
       setIsLoading(true);
       unsubProfiles = listenProfiles((profileRows) => {
-        setProfiles(profileRows.filter((profile) => !!profile.lat && !!profile.lng));
+        const enriched = profileRows.map((p) => {
+          const lat = p.lat ?? getCityCoords(p.currentCity)?.lat;
+          const lng = p.lng ?? getCityCoords(p.currentCity)?.lng;
+          return { ...p, lat, lng };
+        }).filter((p) => p.lat != null && p.lng != null);
+        setProfiles(enriched);
         setIsLoading(false);
       });
 
@@ -117,19 +125,16 @@ export default function Map() {
 
   const loadUserLocation = async () => {
     try {
-      const location = await getCurrentLocation();
+      const { location, error } = await getCurrentLocationWithError();
       if (location) {
         setUserLocation(location);
         setMapCenter({ lat: location.latitude, lng: location.longitude });
         setLocationError(null);
       } else {
-        // Keep default NYC if location not available
-        setLocationError('Location not available. Using default location.');
+        setLocationError(error || 'Location not available. Using default location.');
       }
-    } catch (error: any) {
-      console.error('Error getting location:', error);
-      setLocationError('Unable to get your location. Please enable location permissions in settings.');
-      // Keep default NYC on error
+    } catch (err: any) {
+      setLocationError(err?.message || 'Unable to get your location. Please enable location permissions.');
     } finally {
       setIsLoading(false);
     }
@@ -137,18 +142,14 @@ export default function Map() {
 
   const handleNearMe = async () => {
     setLocationError(null);
-    try {
-      const location = await getCurrentLocation();
-      if (location) {
-        setUserLocation(location);
-        setMapCenter({ lat: location.latitude, lng: location.longitude });
-        setSearchLocation('Near Me');
-        setLocationError(null);
-      } else {
-        setLocationError('Unable to get your location. Please enable location permissions.');
-      }
-    } catch (error: any) {
-      setLocationError('Location permission denied. Please enable location access in your device settings.');
+    const { location, error } = await getCurrentLocationWithError();
+    if (location) {
+      setUserLocation(location);
+      setMapCenter({ lat: location.latitude, lng: location.longitude });
+      setSearchLocation('Near Me');
+      setLocationError(null);
+    } else {
+      setLocationError(error || 'Unable to get your location. Please enable location permissions.');
     }
   };
 
@@ -285,6 +286,7 @@ export default function Map() {
 
   if (selectedProfile) {
     const canSuperLike = premiumFeatures.hasPremium || premiumFeatures.superLikesRemaining > 0;
+    const safeProfile = normalizeProfile(selectedProfile);
     
     return (
       <div className="map-container">
@@ -292,8 +294,16 @@ export default function Map() {
           <button className="map-back-button" onClick={() => setSelectedProfile(null)}>
             ← Back to Map
           </button>
-          <ProfileCard
-            profile={selectedProfile}
+          <ErrorBoundary fallback={
+            <div className="profile-modal-error" onClick={() => setSelectedProfile(null)}>
+              <div className="profile-modal-error-content">
+                <p>Could not load profile.</p>
+                <button onClick={() => setSelectedProfile(null)}>Close</button>
+              </div>
+            </div>
+          }>
+            <ProfileCard
+              profile={safeProfile}
             onLike={() => handleLike(selectedProfile.id)}
             onPass={() => handlePass(selectedProfile.id)}
             onSuperLike={() => handleSuperLike(selectedProfile.id)}
@@ -312,6 +322,7 @@ export default function Map() {
             isSaved={storage.getSavedProfiles().includes(selectedProfile.id)}
             canSuperLike={canSuperLike}
           />
+          </ErrorBoundary>
         </div>
       </div>
     );
@@ -373,6 +384,7 @@ export default function Map() {
             setExploreMode(true);
             setSneakyLinks(false);
             setWhosOutTonight(false);
+            showToast('Explore mode: View all profiles in this area', 'info');
           }}
           title="Explore - View all profiles in this area"
         >
@@ -384,6 +396,7 @@ export default function Map() {
             setExploreMode(false);
             setSneakyLinks(false);
             setWhosOutTonight(false);
+            showToast('Cruise mode: Browse all profiles', 'info');
           }}
           title="Cruise - Browse all profiles"
         >
@@ -395,6 +408,7 @@ export default function Map() {
             setSneakyLinks(true);
             setExploreMode(false);
             setWhosOutTonight(false);
+            showToast('Sneaky Links: Showing hookup-ready profiles only 🔥', 'success');
           }}
           title="Sneaky Links - Show hookup spots only"
         >
@@ -406,6 +420,9 @@ export default function Map() {
             setWhosOutTonight(!whosOutTonight);
             if (whosOutTonight) {
               setSneakyLinks(false);
+              showToast('Showing all profiles', 'info');
+            } else {
+              showToast('Who\'s Out: Showing profiles available tonight 🌙', 'success');
             }
           }}
           title="Who's Out Tonight - Show profiles going out"

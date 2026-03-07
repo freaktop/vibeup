@@ -143,6 +143,10 @@ npx firebase-tools deploy --only firestore:indexes
 
 The app uses a collection-group query on `swipes` (`targetId` + `type`), and the required composite index is already defined in `firestore.indexes.json`.
 
+## Sign-Off Checklist
+
+Before launch, run through [SIGN_OFF_CHECKLIST.md](./SIGN_OFF_CHECKLIST.md). Covers build, core flows, deploy, and Stripe webhook setup.
+
 ## Release Checklist
 
 ### Pre-Release

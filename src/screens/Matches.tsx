@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SafeImage from '../components/SafeImage';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
@@ -6,9 +7,12 @@ import { getCurrentUid } from '../auth';
 import { listenMatches, listenProfiles } from '../firestore';
 import './Matches.css';
 
+type MatchRow = { id: string; users: string[] };
+
 export default function Matches() {
   const [matches, setMatches] = useState<Profile[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
+  const [matchRows, setMatchRows] = useState<MatchRow[]>([]);
 
   useEffect(() => {
     let unsubProfiles: (() => void) | null = null;
@@ -21,18 +25,13 @@ export default function Matches() {
       if (!user) {
         setMatches([]);
         setAllProfiles([]);
+        setMatchRows([]);
         return;
       }
 
       unsubProfiles = listenProfiles((p) => setAllProfiles(p));
-
       unsubMatches = listenMatches(user.uid, (ms) => {
-        const otherIds = ms
-          .map((m) => m.users.find((u) => u !== user.uid))
-          .filter((id): id is string => !!id);
-        const otherSet = new Set(otherIds);
-        const matchedProfiles = allProfiles.filter((p) => otherSet.has(p.id));
-        setMatches(matchedProfiles);
+        setMatchRows(ms.map((m) => ({ id: m.id, users: m.users })));
       });
     });
 
@@ -46,8 +45,14 @@ export default function Matches() {
   useEffect(() => {
     const uid = getCurrentUid();
     if (!uid) return;
-    // matches are derived from allProfiles + listenMatches; this effect ensures UI updates when profiles load
-  }, [allProfiles]);
+    const otherIds = new Set(
+      matchRows
+        .map((m) => m.users.find((u) => u !== uid))
+        .filter((id): id is string => !!id)
+    );
+    const matchedProfiles = allProfiles.filter((p) => otherIds.has(p.id));
+    setMatches(matchedProfiles);
+  }, [allProfiles, matchRows]);
 
   if (matches.length === 0) {
     return (
@@ -63,12 +68,12 @@ export default function Matches() {
     <div className="matches-container">
       {matches.map((match) => (
         <div key={match.id} className="match-card">
-          <img src={match.photo} alt={match.name} className="match-image" />
+          <SafeImage src={match.photo || ''} alt={match.name || 'User'} className="match-image" />
           <div className="match-info">
-            <div className="match-name">{match.name}</div>
-            <div className="match-age">{match.age}</div>
-            {match.tags.length > 0 && (
-              <div className="match-tags">{match.tags.slice(0, 2).join(' • ')}</div>
+            <div className="match-name">{match.name || 'User'}</div>
+            <div className="match-age">{match.age ?? ''}</div>
+            {(match.tags?.length ?? 0) > 0 && (
+              <div className="match-tags">{(match.tags || []).slice(0, 2).join(' • ')}</div>
             )}
           </div>
           <div className="match-badge">💚</div>

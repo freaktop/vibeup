@@ -38,6 +38,22 @@ service cloud.firestore {
       match /notifications/{notificationId} {
         allow read, write: if isSelf(uid);
       }
+
+      match /follows/{targetId} {
+        allow read: if signedIn();
+        allow create, delete: if isSelf(uid);
+      }
+
+      match /premium/status {
+        allow read: if isSelf(uid);
+        allow write: if false;
+      }
+    }
+
+    match /checkIns/{checkInId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     match /matches/{matchId} {

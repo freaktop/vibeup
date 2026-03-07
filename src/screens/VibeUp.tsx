@@ -8,12 +8,14 @@ import ReportModal from '../components/ReportModal';
 import { storage } from '../utils/storage';
 import { shareProfile } from '../utils/shareProfile';
 import { useToast } from '../hooks/useToast';
+import { usePremiumContext } from '../contexts/PremiumContext';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getCurrentUid } from '../auth';
 import { createReport, listenMySwipes, listenProfiles, listenWhoLikedMe, removeSwipe, setSwipe, unmatch, type SwipeType } from '../firestore';
 import { enrichProfilesWithDistance } from '../utils/geolocation';
+import { normalizeProfile } from '../utils/normalizeProfile';
 import './VibeUp.css';
 
 export default function VibeUp() {
@@ -24,7 +26,7 @@ export default function VibeUp() {
   const [savedProfiles, setSavedProfiles] = useState<string[]>([]);
   const [showMatchAnimation, setShowMatchAnimation] = useState(false);
   const [matchedProfile, setMatchedProfile] = useState<Profile | null>(null);
-  const [premiumFeatures] = useState(storage.getPremiumFeatures());
+  const premiumFeatures = usePremiumContext();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [whoLikedMeIds, setWhoLikedMeIds] = useState<string[]>([]);
@@ -342,7 +344,7 @@ export default function VibeUp() {
         return (
           <ProfileCard
             key={profile.id}
-            profile={profile}
+            profile={normalizeProfile(profile)}
             onLike={() => handleLike(profile.id)}
             onPass={() => handlePass(profile.id)}
             onSuperLike={() => handleSuperLike(profile.id)}

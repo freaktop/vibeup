@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Profile } from '../types';
+import SafeImage from './SafeImage';
 import './ProfileDetailModal.css';
 
 interface ProfileDetailModalProps {
@@ -7,26 +8,41 @@ interface ProfileDetailModalProps {
   onClose: () => void;
   onLike?: () => void;
   onMessage?: () => void;
+  onFollow?: () => void;
+  onUnfollow?: () => void;
   isLiked?: boolean;
+  isFollowing?: boolean;
+  isOwnProfile?: boolean;
 }
+
+const DEFAULT_PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop';
 
 export default function ProfileDetailModal({ 
   profile, 
   onClose, 
   onLike, 
   onMessage,
-  isLiked 
+  onFollow,
+  onUnfollow,
+  isLiked,
+  isFollowing,
+  isOwnProfile,
 }: ProfileDetailModalProps) {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
-  const photos = profile.photos || [profile.photo];
+  const photos = (profile?.photos?.length ? profile.photos : [profile?.photo].filter(Boolean)) as string[];
+  const safePhotos = photos.length > 0 ? photos : [DEFAULT_PHOTO];
+  const displayName = profile?.name ?? 'User';
+  const displayAge = profile?.age ?? '';
 
   const nextPhoto = () => {
-    setCurrentPhotoIndex((prev) => (prev + 1) % photos.length);
+    setCurrentPhotoIndex((prev) => (prev + 1) % safePhotos.length);
   };
 
   const prevPhoto = () => {
-    setCurrentPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    setCurrentPhotoIndex((prev) => (prev - 1 + safePhotos.length) % safePhotos.length);
   };
+
+  if (!profile) return null;
 
   return (
     <div className="profile-detail-modal-overlay" onClick={onClose}>
@@ -34,12 +50,13 @@ export default function ProfileDetailModal({
         <button className="profile-detail-close" onClick={onClose}>✕</button>
         
         <div className="profile-detail-photos">
-          <img 
-            src={photos[currentPhotoIndex]} 
-            alt={profile.name}
+          <SafeImage 
+            src={safePhotos[currentPhotoIndex] || DEFAULT_PHOTO} 
+            alt={displayName}
             className="profile-detail-main-photo"
+            loading="eager"
           />
-          {photos.length > 1 && (
+          {safePhotos.length > 1 && (
             <>
               <button className="profile-detail-nav profile-detail-nav-left" onClick={prevPhoto}>
                 ←
@@ -48,7 +65,7 @@ export default function ProfileDetailModal({
                 →
               </button>
               <div className="profile-detail-photo-indicator">
-                {currentPhotoIndex + 1} / {photos.length}
+                {currentPhotoIndex + 1} / {safePhotos.length}
               </div>
             </>
           )}
@@ -56,7 +73,7 @@ export default function ProfileDetailModal({
 
         <div className="profile-detail-content">
           <div className="profile-detail-header">
-            <h2>{profile.name}, {profile.age}</h2>
+            <h2>{displayName}{displayAge !== '' ? `, ${displayAge}` : ''}</h2>
             {profile.distance !== undefined && (
               <div className="profile-detail-distance">{profile.distance} mi away</div>
             )}
@@ -82,7 +99,7 @@ export default function ProfileDetailModal({
             </div>
           )}
 
-          {profile.lookingFor && profile.lookingFor.length > 0 && (
+          {Array.isArray(profile.lookingFor) && profile.lookingFor.length > 0 && (
             <div className="profile-detail-section">
               <h3>Looking For</h3>
               <div className="profile-detail-tags">
@@ -93,7 +110,7 @@ export default function ProfileDetailModal({
             </div>
           )}
 
-          {profile.into && profile.into.length > 0 && (
+          {Array.isArray(profile.into) && profile.into.length > 0 && (
             <div className="profile-detail-section">
               <h3>Into</h3>
               <div className="profile-detail-tags">
@@ -118,7 +135,7 @@ export default function ProfileDetailModal({
             </div>
           )}
 
-          {profile.tags && profile.tags.length > 0 && (
+          {Array.isArray(profile.tags) && profile.tags.length > 0 && (
             <div className="profile-detail-section">
               <h3>Interests</h3>
               <div className="profile-detail-tags">
@@ -129,7 +146,7 @@ export default function ProfileDetailModal({
             </div>
           )}
 
-          {profile.kinks && profile.kinks.length > 0 && (
+          {Array.isArray(profile.kinks) && profile.kinks.length > 0 && (
             <div className="profile-detail-section">
               <h3>Kinks / Preferences</h3>
               <div className="profile-detail-tags">
@@ -141,6 +158,14 @@ export default function ProfileDetailModal({
           )}
 
           <div className="profile-detail-actions">
+            {!isOwnProfile && onFollow && onUnfollow && (
+              <button 
+                className={`profile-detail-action-btn follow-btn ${isFollowing ? 'following' : ''}`}
+                onClick={isFollowing ? onUnfollow : onFollow}
+              >
+                {isFollowing ? '✓ Following' : '+ Follow'}
+              </button>
+            )}
             {onLike && (
               <button 
                 className={`profile-detail-action-btn ${isLiked ? 'liked' : ''}`}

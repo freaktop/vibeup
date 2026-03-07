@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { storage } from '../utils/storage';
-import { seedMockProfilesIfEmpty, upsertMyProfile } from '../firestore';
+import { getCurrentUid } from '../auth';
+import { ensureNewUserFollowsOwner, seedMockProfilesIfEmpty, upsertMyProfile } from '../firestore';
 import './Onboarding.css';
 
 interface OnboardingProps {
@@ -38,6 +39,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     upsertMyProfile(nextProfile).catch((err) => {
       console.error('Onboarding: failed to create profile', err);
     });
+    getCurrentUid() && ensureNewUserFollowsOwner(getCurrentUid()!).catch(() => null);
     if (enableMockSeed) {
       seedMockProfilesIfEmpty().catch(() => null);
     }
@@ -52,6 +54,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     upsertMyProfile(existingProfile).catch((err) => {
       console.error('Onboarding: failed to create profile on skip', err);
     });
+    getCurrentUid() && ensureNewUserFollowsOwner(getCurrentUid()!).catch(() => null);
     if (enableMockSeed) {
       seedMockProfilesIfEmpty().catch(() => null);
     }
@@ -124,7 +127,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   checked={photoRulesAccepted}
                   onChange={(e) => setPhotoRulesAccepted(e.target.checked)}
                 />
-                <span>Face photo required for your profile</span>
+                <span>First profile photo must be a clear face picture. Other photos can be private or public.</span>
               </label>
               <label className="rule-checkbox">
                 <input

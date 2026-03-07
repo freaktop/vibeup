@@ -324,6 +324,7 @@ export const storage = {
   savePremiumFeatures(features: any): void {
     try {
       safeSetItem('@vibeup:premium', JSON.stringify(features));
+      window.dispatchEvent(new CustomEvent('premiumUpdated'));
     } catch (error) {
       logger.error('Error saving premium features:', error);
     }

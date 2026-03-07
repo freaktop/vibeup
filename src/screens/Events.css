@@ -53,8 +53,16 @@
   color: #fff;
 }
 
+.events-create-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
 .create-event-btn {
-  width: 100%;
+  flex: 1;
+  min-width: 140px;
   padding: 14px;
   background: #FF6B9D;
   color: #fff;
@@ -63,12 +71,19 @@
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  margin-bottom: 16px;
   transition: background 0.2s;
 }
 
 .create-event-btn:hover {
   background: #ff5a8a;
+}
+
+.create-event-btn.list-venue-btn {
+  background: #4CAF50;
+}
+
+.create-event-btn.list-venue-btn:hover {
+  background: #45a049;
 }
 
 .events-filters {
@@ -586,8 +601,31 @@
   color: #fff;
 }
 
+.action-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
 .action-btn.interested {
   background: #ffd700;
   border-color: #ffd700;
   color: #000;
+}
+
+.checkins-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.checkins-section h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.checkins-note {
+  margin: 0;
+  font-size: 12px;
+  color: #999;
 }

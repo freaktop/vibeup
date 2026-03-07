@@ -43,6 +43,7 @@ registerSW({
 });
 
 import { AuthProvider } from './contexts/AuthContext'
+import { PremiumProvider } from './contexts/PremiumContext'
 import { storage } from './utils/storage'
 
 // Production: clear any demo session so users must sign in with real auth
@@ -54,7 +55,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <AuthProvider>
-        <App />
+        <PremiumProvider>
+          <App />
+        </PremiumProvider>
       </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>,

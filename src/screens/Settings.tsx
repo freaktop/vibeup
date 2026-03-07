@@ -201,6 +201,7 @@ export default function Settings() {
         <button className="settings-button" onClick={() => {
           // Navigate to Profile tab where Privacy & Safety toggles are
           window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'profile' } }));
+          showToast('Opening Privacy Settings in Profile tab...', 'info');
           // Scroll to privacy section (in real app would use navigation)
           setTimeout(() => {
             const privacySection = document.querySelector('.profile-toggle-section');
@@ -248,12 +249,13 @@ export default function Settings() {
       </div>
 
       <div className="settings-section">
-        <h2 className="settings-section-title">Support</h2>
+        <h2 className="settings-section-title">Support & Help</h2>
         <button className="settings-button" onClick={() => {
-          showToast('Need help? Email support@vibeup.app for account, privacy, or billing questions.', 'info');
+          window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'profile' } }));
+          showToast('Premium features available in Profile → Upgrade. Get unlimited likes, see who likes you, and more!', 'info');
         }}>
-          <span>❓</span>
-          <span>Help Center</span>
+          <span>💎</span>
+          <span>Premium Features</span>
           <span>→</span>
         </button>
         <button className="settings-button" onClick={() => {
@@ -266,10 +268,10 @@ export default function Settings() {
           <span>→</span>
         </button>
         <button className="settings-button" onClick={() => {
-          showToast('Use block/report tools and privacy controls to stay safe on VibeUp.', 'info');
+          showToast('✓ How to stay safe:\n1. Block users you\'re uncomfortable with\n2. Report inappropriate behavior\n3. Check Privacy Settings for visibility controls\n4. Never share financial info in chat', 'info');
         }}>
           <span>🛡️</span>
-          <span>Safety Resources</span>
+          <span>Safety Tips</span>
           <span>→</span>
         </button>
         <button className="settings-button" onClick={() => {
@@ -277,6 +279,14 @@ export default function Settings() {
         }}>
           <span>🐛</span>
           <span>Report a Problem</span>
+          <span>→</span>
+        </button>
+        <button className="settings-button" onClick={() => {
+          showToast('FAQ: Check our community guidelines and privacy policy. Most questions are answered there!', 'info');
+          window.open('https://www.termsfeed.com/blog/community-guidelines-template/', '_blank');
+        }}>
+          <span>❓</span>
+          <span>FAQ & Help</span>
           <span>→</span>
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import PullToRefresh from '../components/PullToRefresh';
+import SafeImage from '../components/SafeImage';
 import Loading from '../components/Loading';
 import ErrorMessage from '../components/ErrorMessage';
 import { Message } from '../types';
@@ -90,8 +91,8 @@ export default function Messages({ onOpenChat, onOpenGroupChat }: MessagesProps)
           return {
             id: m.id,
             profileId: otherId,
-            profileName: profile.name,
-            profilePhoto: profile.photo,
+            profileName: profile.name ?? 'User',
+            profilePhoto: profile.photo ?? '',
             lastMessage: m.lastMessage ?? 'Start the conversation!',
             timestamp: m.lastMessageAt ?? Date.now(),
             unread: 0,
@@ -208,7 +209,7 @@ export default function Messages({ onOpenChat, onOpenGroupChat }: MessagesProps)
                 }
               }}
             >
-              <img src={message.profilePhoto} alt={message.profileName} className="message-avatar" />
+              <SafeImage src={message.profilePhoto} alt={message.profileName} className="message-avatar" />
               <div className="message-content">
                 <div className="message-header">
                   <span className="message-name">
@@ -319,7 +320,7 @@ function CreateGroupModal({
                   checked={selectedMembers.includes(member.id)}
                   onChange={() => toggleMember(member.id)}
                 />
-                <img src={member.photo} alt={member.name} className="member-avatar" />
+                <SafeImage src={member.photo} alt={member.name} className="member-avatar" />
                 <span>{member.name}</span>
               </label>
             ))

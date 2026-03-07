@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProfileCard from '../components/ProfileCard';
+import SafeImage from '../components/SafeImage';
 import Filters, { FilterSettings } from '../components/Filters';
 import MatchAnimation from '../components/MatchAnimation';
 import PremiumModal from '../components/PremiumModal';
@@ -8,16 +9,19 @@ import ActionSheetModal from '../components/ActionSheetModal';
 import ReportModal from '../components/ReportModal';
 import Loading from '../components/Loading';
 import ErrorMessage from '../components/ErrorMessage';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { storage } from '../utils/storage';
 import { shareProfile } from '../utils/shareProfile';
 import { runPremiumPurchase } from '../utils/premiumPurchase';
 import { useToast } from '../hooks/useToast';
+import { usePremiumContext } from '../contexts/PremiumContext';
 import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getCurrentUid } from '../auth';
-import { createReport, listenMySwipes, listenProfiles, recordProfileView, removeSwipe, setSwipe, unmatch, type SwipeType } from '../firestore';
+import { createReport, followUser, listenMySwipes, listenProfiles, listenUserFollows, recordProfileView, removeSwipe, setSwipe, unfollowUser, unmatch, type SwipeType } from '../firestore';
 import { enrichProfilesWithDistance } from '../utils/geolocation';
+import { normalizeProfile } from '../utils/normalizeProfile';
 import './Discover.css';
 
 type IntentFilter = 'hookup' | 'date' | 'goingout';
@@ -36,19 +40,31 @@ export default function Discover() {
   const [matchedProfile, setMatchedProfile] = useState<Profile | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>('');
-  const [premiumFeatures, setPremiumFeatures] = useState(storage.getPremiumFeatures());
+  const premiumFeatures = usePremiumContext();
   const [lastSwipe, setLastSwipe] = useState<{ type: string; profileId: string } | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid'); // DEFAULT TO GRID
   const [intentFilter, setIntentFilter] = useState<IntentFilter>('hookup');
   const [selectedProfileForCard, setSelectedProfileForCard] = useState<Profile | null>(null);
   const [selectedProfileForDetail, setSelectedProfileForDetail] = useState<Profile | null>(null);
+  const [ProfileDetailModalComponent, setProfileDetailModalComponent] = useState<React.ComponentType<{
+    profile: Profile;
+    onClose: () => void;
+    onLike?: () => void;
+    onMessage?: () => void;
+    onFollow?: () => void;
+    onUnfollow?: () => void;
+    isLiked?: boolean;
+    isFollowing?: boolean;
+    isOwnProfile?: boolean;
+  }> | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasSwiped, setHasSwiped] = useState(false);
   const [blockedProfiles, setBlockedProfiles] = useState<string[]>([]);
   const [mySwipes, setMySwipes] = useState<Record<string, SwipeType>>({});
+  const [followingIds, setFollowingIds] = useState<string[]>([]);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [actionProfileId, setActionProfileId] = useState<string | null>(null);
@@ -69,6 +85,15 @@ export default function Discover() {
     verifiedOnly: false,
     bodyType: [],
   });
+
+  // Load ProfileDetailModal dynamically when a profile is selected (avoids "ProfileDetailModal is not defined" with lazy-loaded Discover)
+  useEffect(() => {
+    if (selectedProfileForDetail) {
+      import('../components/ProfileDetailModal').then((mod) => setProfileDetailModalComponent(() => mod.default));
+    } else {
+      setProfileDetailModalComponent(null);
+    }
+  }, [selectedProfileForDetail]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -94,27 +119,28 @@ export default function Discover() {
 
     let unsubProfiles: (() => void) | null = null;
     let unsubSwipes: (() => void) | null = null;
+    let unsubFollows: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       unsubProfiles?.();
       unsubSwipes?.();
+      unsubFollows?.();
 
       if (!user) {
         setProfiles([]);
         setMySwipes({});
+        setFollowingIds([]);
         setIsLoading(false);
         setError(null);
         return;
       }
 
       unsubProfiles = listenProfiles((p) => {
-        enrichProfilesWithDistance(p).then((enriched) => {
-          setProfiles(enriched);
-          setIsLoading(false);
-          if (p.length === 0) {
-            setError((prev) => prev || 'Unable to load profiles. Check Firestore rules / network.');
-          }
-        });
+        setProfiles(p);
+        setIsLoading(false);
+        if (p.length === 0) {
+          setError((prev) => prev || 'Unable to load profiles. Check that:\n1. Firestore rules allow reads\n2. Profiles exist in the database\n3. Internet connection is stable\n\nTap the refresh button to retry.');
+        }
       });
 
       unsubSwipes = listenMySwipes(user.uid, (swipes) => {
@@ -141,12 +167,15 @@ export default function Discover() {
         setBlockedProfiles(blocked);
         setSavedProfiles(saved);
       });
+
+      unsubFollows = listenUserFollows(user.uid, setFollowingIds);
     });
 
     return () => {
       unsubAuth();
       unsubProfiles?.();
       unsubSwipes?.();
+      unsubFollows?.();
     };
   }, []);
 
@@ -281,7 +310,13 @@ export default function Discover() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const enriched = await enrichProfilesWithDistance(profiles);
+      setProfiles(enriched);
+    } catch {
+      // Keep current profiles if geolocation fails
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
     setIsRefreshing(false);
   };
 
@@ -324,10 +359,9 @@ export default function Discover() {
 
     const res = await setSwipe(uid, profileId, 'superlike');
 
-    if (!premiumFeatures.hasPremium) {
-      const updated = { ...premiumFeatures, superLikesRemaining: premiumFeatures.superLikesRemaining - 1 };
-      setPremiumFeatures(updated);
-      storage.savePremiumFeatures(updated);
+      if (!premiumFeatures.hasPremium) {
+        const updated = { ...premiumFeatures, superLikesRemaining: premiumFeatures.superLikesRemaining - 1 };
+        storage.savePremiumFeatures(updated);
     }
 
     storage.addSwipeToHistory({ type: 'superlike', profileId });
@@ -362,7 +396,6 @@ export default function Discover() {
 
       if (!premiumFeatures.hasPremium) {
         const updated = { ...premiumFeatures, undosRemaining: premiumFeatures.undosRemaining - 1 };
-        setPremiumFeatures(updated);
         storage.savePremiumFeatures(updated);
       }
 
@@ -412,8 +445,16 @@ export default function Discover() {
 
   const handleProfileClick = (profile: Profile) => {
     if (viewMode === 'grid') {
-      recordProfileView(profile.id).catch(() => {});
-      setSelectedProfileForDetail(profile);
+      try {
+        recordProfileView(profile.id).catch(() => {});
+        setSelectedProfileForDetail(normalizeProfile(profile));
+      } catch (err) {
+        console.error('Profile click error:', err);
+        setSelectedProfileForDetail(normalizeProfile(profile));
+      }
+    } else if (viewMode === 'card') {
+      // In card view, show profile details instead of switching
+      setSelectedProfileForDetail(normalizeProfile(profile));
     }
   };
 
@@ -525,6 +566,11 @@ export default function Discover() {
       showToast(`Purchase failed: ${purchase.message}`, 'error');
       return;
     }
+    // Web: opening Stripe link - do NOT grant premium. Webhook → Firestore will update when paid.
+    if ((purchase as { webOpened?: boolean }).webOpened) {
+      showToast(purchase.message || 'Complete checkout in the new tab. Premium activates when payment is confirmed.', 'info');
+      return;
+    }
 
     let updated = { ...premiumFeatures };
     
@@ -546,7 +592,6 @@ export default function Discover() {
       updated.boostsRemaining += 1;
     }
     
-    setPremiumFeatures(updated);
     storage.savePremiumFeatures(updated);
     showToast(`Purchase successful: ${feature} activated.`, 'success');
   };
@@ -796,7 +841,7 @@ export default function Discover() {
               onClick={() => handleProfileClick(profile)}
             >
               <div className="grid-item-image-container">
-                <img src={profile.photo} alt={profile.name} className="grid-item-image" />
+                <SafeImage src={profile.photo} alt={profile.name} className="grid-item-image" />
                 {profile.online && (
                   <div className="grid-item-online" title="Online now">●</div>
                 )}
@@ -891,10 +936,29 @@ export default function Discover() {
           feature={premiumFeature}
         />
 
-        {selectedProfileForDetail && (
-          <ProfileDetailModal
-            profile={selectedProfileForDetail}
-            onClose={() => setSelectedProfileForDetail(null)}
+        {selectedProfileForDetail && !ProfileDetailModalComponent && (
+          <div className="profile-modal-error" onClick={() => setSelectedProfileForDetail(null)}>
+            <div className="profile-modal-error-content" onClick={(e) => e.stopPropagation()}>
+              <p>Loading profile...</p>
+              <button onClick={() => setSelectedProfileForDetail(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {selectedProfileForDetail && ProfileDetailModalComponent && (
+          <ErrorBoundary
+            key={selectedProfileForDetail.id}
+            fallback={
+              <div className="profile-modal-error" onClick={() => setSelectedProfileForDetail(null)}>
+                <div className="profile-modal-error-content" onClick={(e) => e.stopPropagation()}>
+                  <p>Could not load profile. Tap to close.</p>
+                  <button onClick={() => setSelectedProfileForDetail(null)}>Close</button>
+                </div>
+              </div>
+            }
+          >
+            <ProfileDetailModalComponent
+              profile={normalizeProfile(selectedProfileForDetail)}
+              onClose={() => setSelectedProfileForDetail(null)}
             onLike={() => {
               if (selectedProfileForDetail) {
                 handleLike(selectedProfileForDetail.id);
@@ -907,8 +971,23 @@ export default function Discover() {
                 setSelectedProfileForDetail(null);
               }
             }}
+            onFollow={() => {
+              const uid = getCurrentUid();
+              if (uid && selectedProfileForDetail) {
+                followUser(uid, selectedProfileForDetail.id).catch(() => null);
+              }
+            }}
+            onUnfollow={() => {
+              const uid = getCurrentUid();
+              if (uid && selectedProfileForDetail) {
+                unfollowUser(uid, selectedProfileForDetail.id).catch(() => null);
+              }
+            }}
             isLiked={selectedProfileForDetail ? likedProfiles.includes(selectedProfileForDetail.id) : false}
-          />
+            isFollowing={selectedProfileForDetail ? followingIds.includes(selectedProfileForDetail.id) : false}
+            isOwnProfile={selectedProfileForDetail ? getCurrentUid() === selectedProfileForDetail.id : false}
+            />
+          </ErrorBoundary>
         )}
 
         <ActionSheetModal

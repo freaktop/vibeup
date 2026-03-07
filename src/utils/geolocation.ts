@@ -13,43 +13,75 @@ export interface Location {
  * Get user's current location (works on web and native)
  */
 export async function getCurrentLocation(): Promise<Location | null> {
+  const result = await getCurrentLocationWithError();
+  return result.location;
+}
+
+/**
+ * Get location with user-friendly error message for UI
+ */
+export async function getCurrentLocationWithError(): Promise<{
+  location: Location | null;
+  error?: string;
+}> {
   try {
     if (Capacitor.isNativePlatform()) {
       const position = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 15000,
       });
       return {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy || undefined,
+        location: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy || undefined,
+        },
       };
     }
 
-    // Web: use navigator.geolocation
+    // Web: use navigator.geolocation (requires HTTPS)
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
+        const msg =
+          typeof window !== 'undefined' && window.location?.protocol !== 'https:' && !window.location?.hostname?.includes('localhost')
+            ? 'Location requires HTTPS. Use a secure connection.'
+            : 'Geolocation is not supported by your browser.';
         logger.warn('Geolocation not supported');
-        resolve(null);
+        resolve({ location: null, error: msg });
         return;
       }
       navigator.geolocation.getCurrentPosition(
         (pos) =>
           resolve({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracy: pos.coords.accuracy || undefined,
+            location: {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy || undefined,
+            },
           }),
         (err) => {
           logger.warn('Geolocation error:', err.message);
-          resolve(null);
+          let msg = 'Unable to get your location.';
+          if (err.code === 1) {
+            msg = 'Location permission denied. Please enable location access in your browser or device settings.';
+          } else if (err.code === 2) {
+            msg = 'Location unavailable. Please check your device settings.';
+          } else if (err.code === 3) {
+            msg = 'Location request timed out. Please try again.';
+          } else if (err.message) {
+            msg = err.message;
+          }
+          resolve({ location: null, error: msg });
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
       );
     });
   } catch (error: any) {
     logger.error('Error getting location:', error);
-    return null;
+    return {
+      location: null,
+      error: error?.message || 'Unable to get your location. Please try again.',
+    };
   }
 }
 
@@ -116,7 +148,6 @@ export function getCityCoords(cityStr: string | undefined): { lat: number; lng: 
   const parts = cityStr.split(',').map((s) => s.trim());
   const cityName = parts[0];
   const state = parts[1]?.toUpperCase() || '';
-  const { usCities } = require('../data/cities');
   const match = usCities.find(
     (c) =>
       c.name.toLowerCase() === cityName?.toLowerCase() && (!state || c.state === state),

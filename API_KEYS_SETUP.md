@@ -28,6 +28,10 @@ VITE_REVENUECAT_ENTITLEMENT_ID=premium
 # Create a Payment Link in Stripe Dashboard, add URL here
 VITE_STRIPE_PAYMENT_LINK_URL=https://buy.stripe.com/your_payment_link
 
+# Owner profile ID (Optional - new users auto-follow you for mass messaging)
+# Your Firebase Auth UID - add to .env so new signups follow you
+VITE_OWNER_PROFILE_ID=your_firebase_auth_uid
+
 # Legal (required for production)
 VITE_TERMS_URL=https://yoursite.com/terms
 VITE_PRIVACY_URL=https://yoursite.com/privacy

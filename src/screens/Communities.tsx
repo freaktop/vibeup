@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import SafeImage from '../components/SafeImage';
 import { storage } from '../utils/storage';
 import { Community } from '../types';
 import { useToast } from '../hooks/useToast';
+import { usePremiumContext } from '../contexts/PremiumContext';
 import { getCurrentUid } from '../auth';
 import { createRoom, joinCommunity, leaveCommunity, listenCommunities, listenMyCommunityIds, listenRooms, seedCommunitiesIfEmpty, type Room } from '../firestore';
 import './Communities.css';
@@ -17,7 +19,7 @@ export default function Communities() {
   const [pendingRoom, setPendingRoom] = useState<Room | null>(null);
   const [inviteCodeInput, setInviteCodeInput] = useState('');
   const [newRoom, setNewRoom] = useState({ name: '', description: '', tags: '', inviteCode: '' });
-  const premiumFeatures = storage.getPremiumFeatures();
+  const premiumFeatures = usePremiumContext();
 
   useEffect(() => {
     seedCommunitiesIfEmpty().catch(() => {});
@@ -180,7 +182,7 @@ export default function Communities() {
       <div className="communities-list">
         {filteredCommunities.map((community) => (
           <div key={community.id} className="community-card">
-            <img src={community.photo} alt={community.name} className="community-photo" />
+            <SafeImage src={community.photo} alt={community.name} className="community-photo" />
             <div className="community-content">
               <div className="community-header">
                 <h3 className="community-name">{community.name}</h3>

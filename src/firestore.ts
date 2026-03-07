@@ -152,12 +152,25 @@ export function listenProfiles(onChange: (profiles: Profile[]) => void): Unsubsc
   return onSnapshot(
     q,
     (snap) => {
-      const profiles = snap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as Omit<Profile, 'id'>) }))
-        .filter((p) => (uid ? p.id !== uid : true));
-      onChange(profiles);
+      try {
+        const profiles = snap.docs
+          .map((d) => {
+            const data = d.data() as Omit<Profile, 'id'>;
+            return { id: d.id, ...data };
+          })
+          .filter((p) => (uid ? p.id !== uid : true));
+        
+        if (profiles.length === 0) {
+          console.warn('[Discover] No profiles returned from Firestore query (0 docs present)');
+        }
+        onChange(profiles);
+      } catch (err) {
+        console.error('[Discover] Error processing profiles snapshot:', err);
+        onChange([]);
+      }
     },
-    () => {
+    (err) => {
+      console.error('[Discover] Firebase listen error:', err?.code, err?.message);
       // caller can still show an empty state; this prevents silent hangs
       onChange([]);
     },
@@ -191,6 +204,30 @@ export function listenMySwipes(
     () => {
       onChange({});
     },
+  );
+}
+
+/** Listen to premium status from Firestore (set by Stripe webhook → Cloud Function) */
+export function listenPremiumFromFirestore(
+  uid: string,
+  onChange: (hasPremium: boolean) => void,
+): Unsubscribe {
+  if (isDemoMode()) {
+    onChange(false);
+    return () => {};
+  }
+  const ref = doc(db, 'users', uid, 'premium', 'status');
+  return onSnapshot(
+    ref,
+    (snap) => {
+      const data = snap.data() as { hasPremium?: boolean; expiresAt?: { toMillis: () => number } | number } | undefined;
+      const expiresAt = typeof data?.expiresAt === 'object' && data?.expiresAt?.toMillis
+        ? data.expiresAt.toMillis()
+        : (data?.expiresAt as number | undefined);
+      const hasPremium = !!data?.hasPremium && (!expiresAt || expiresAt > Date.now());
+      onChange(hasPremium);
+    },
+    () => onChange(false),
   );
 }
 
@@ -245,6 +282,157 @@ export async function setSwipe(uid: string, targetId: string, type: SwipeType): 
 export async function removeSwipe(uid: string, targetId: string): Promise<void> {
   const ref = doc(db, 'users', uid, 'swipes', targetId);
   await deleteDoc(ref);
+}
+
+// ─── Follow / Friends ───────────────────────────────────────────────────────
+
+export async function followUser(uid: string, targetId: string): Promise<void> {
+  if (isDemoMode()) return;
+  if (uid === targetId) return;
+  const ref = doc(db, 'users', uid, 'follows', targetId);
+  await setDoc(ref, { targetId, createdAt: serverTimestamp() }, { merge: true });
+}
+
+export async function unfollowUser(uid: string, targetId: string): Promise<void> {
+  if (isDemoMode()) return;
+  const ref = doc(db, 'users', uid, 'follows', targetId);
+  await deleteDoc(ref);
+}
+
+export function listenUserFollows(uid: string, onChange: (ids: string[]) => void): Unsubscribe {
+  if (isDemoMode()) {
+    onChange([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'users', uid, 'follows'));
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => d.id)),
+    () => onChange([]),
+  );
+}
+
+/** Listen to who follows a given profile (users who have profileId in their follows) */
+export function listenFollowedBy(profileId: string, onChange: (followerIds: string[]) => void): Unsubscribe {
+  if (isDemoMode()) {
+    onChange([]);
+    return () => {};
+  }
+  const q = query(
+    collectionGroup(db, 'follows'),
+    where('targetId', '==', profileId),
+  );
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => d.ref.parent.parent?.id).filter(Boolean) as string[]),
+    () => onChange([]),
+  );
+}
+
+/** Call when a new user completes onboarding - auto-follows owner so mass messages reach them */
+export async function ensureNewUserFollowsOwner(uid: string): Promise<void> {
+  if (isDemoMode()) return;
+  const { config } = await import('./config/api');
+  const ownerId = config.ownerProfileId?.trim();
+  if (!ownerId || ownerId === uid) return;
+  await followUser(uid, ownerId);
+}
+
+// ─── Check-ins (events & places) ────────────────────────────────────────────
+
+export interface CheckIn {
+  id: string;
+  userId: string;
+  eventId?: string;
+  locationId?: string;
+  placeName: string;
+  lat?: number;
+  lng?: number;
+  checkInAt: number;
+}
+
+export async function addCheckIn(
+  uid: string,
+  opts: { eventId?: string; locationId?: string; placeName: string; lat?: number; lng?: number },
+): Promise<string> {
+  if (isDemoMode()) return '';
+  const ref = doc(collection(db, 'checkIns'));
+  await setDoc(ref, {
+    userId: uid,
+    eventId: opts.eventId || null,
+    locationId: opts.locationId || null,
+    placeName: opts.placeName || 'Unknown',
+    lat: opts.lat ?? null,
+    lng: opts.lng ?? null,
+    checkInAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export function listenCheckInsAtEvent(eventId: string, onChange: (checkIns: CheckIn[]) => void): Unsubscribe {
+  if (isDemoMode()) {
+    onChange([]);
+    return () => {};
+  }
+  const q = query(
+    collection(db, 'checkIns'),
+    where('eventId', '==', eventId),
+    orderBy('checkInAt', 'desc'),
+    limit(50),
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          userId: data.userId || '',
+          eventId: data.eventId,
+          locationId: data.locationId,
+          placeName: data.placeName || 'Unknown',
+          lat: data.lat,
+          lng: data.lng,
+          checkInAt: data.checkInAt?.toMillis?.() ?? Date.now(),
+        };
+      });
+      onChange(items);
+    },
+    () => onChange([]),
+  );
+}
+
+export function listenCheckInsAtLocation(locationId: string, onChange: (checkIns: CheckIn[]) => void): Unsubscribe {
+  if (isDemoMode()) {
+    onChange([]);
+    return () => {};
+  }
+  const q = query(
+    collection(db, 'checkIns'),
+    where('locationId', '==', locationId),
+    orderBy('checkInAt', 'desc'),
+    limit(50),
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          userId: data.userId || '',
+          eventId: data.eventId,
+          locationId: data.locationId,
+          placeName: data.placeName || 'Unknown',
+          lat: data.lat,
+          lng: data.lng,
+          checkInAt: data.checkInAt?.toMillis?.() ?? Date.now(),
+        };
+      });
+      onChange(items);
+    },
+    () => onChange([]),
+  );
 }
 
 /** Remove match and our swipe so neither user sees the match anymore */
@@ -551,25 +739,51 @@ export function listenLocations(onChange: (locations: Location[]) => void): Unsu
   return onSnapshot(
     q,
     (snap) => {
-      const locations: Location[] = snap.docs.map((d) => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          name: data.name || 'Unnamed location',
-          type: (data.type as Location['type']) || 'venue',
-          address: data.address || '',
-          distance: typeof data.distance === 'number' ? data.distance : 0,
-          photo: data.photo || '',
-          rating: typeof data.rating === 'number' ? data.rating : undefined,
-          description: data.description || undefined,
-          lat: typeof data.lat === 'number' ? data.lat : undefined,
-          lng: typeof data.lng === 'number' ? data.lng : undefined,
-        };
-      });
+      const locations: Location[] = snap.docs
+        .filter((d) => (d.data() as any).status !== 'pending')
+        .map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            name: data.name || 'Unnamed location',
+            type: (data.type as Location['type']) || 'venue',
+            address: data.address || '',
+            distance: typeof data.distance === 'number' ? data.distance : 0,
+            photo: data.photo || '',
+            rating: typeof data.rating === 'number' ? data.rating : undefined,
+            description: data.description || undefined,
+            lat: typeof data.lat === 'number' ? data.lat : undefined,
+            lng: typeof data.lng === 'number' ? data.lng : undefined,
+          };
+        });
       onChange(locations);
     },
     () => onChange([]),
   );
+}
+
+export async function createLocation(location: Omit<Location, 'id'> & { id?: string }): Promise<string> {
+  if (isDemoMode()) {
+    return `demo_${Date.now()}`;
+  }
+  const uid = requireUid();
+  const ref = await addDoc(collection(db, 'locations'), {
+    name: location.name || 'Unnamed',
+    type: location.type || 'venue',
+    address: location.address || '',
+    distance: typeof location.distance === 'number' ? location.distance : 0,
+    photo: location.photo || '',
+    rating: location.rating,
+    description: location.description || '',
+    lat: location.lat,
+    lng: location.lng,
+    city: (location as any).city || '',
+    state: (location as any).state || '',
+    createdBy: uid,
+    createdAt: serverTimestamp(),
+    status: 'approved',
+  });
+  return ref.id;
 }
 
 export function listenEvents(onChange: (events: Event[]) => void): Unsubscribe {

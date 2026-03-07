@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { storage } from '../utils/storage';
 import { Event, Location } from '../types';
 import { getCurrentUid } from '../auth';
-import { createEvent, listenEvents, listenLocations, setEventRsvp } from '../firestore';
+import { addCheckIn, createEvent, createLocation, listenCheckInsAtEvent, listenCheckInsAtLocation, listenEvents, listenLocations, setEventRsvp, type CheckIn } from '../firestore';
+import SafeImage from '../components/SafeImage';
+import ListVenueModal from '../components/ListVenueModal';
+import { mockLocations } from '../data/mockLocations';
+import { usCities } from '../data/cities';
+import { getCurrentLocation } from '../utils/geolocation';
 import { useToast } from '../hooks/useToast';
 import './Events.css';
 
@@ -26,6 +31,8 @@ export default function Events() {
   const [eventViewMode, setEventViewMode] = useState<EventViewMode>('list');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ type: 'event' | 'place'; data: Event | Location } | null>(null);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
+  const [hasCheckedIn, setHasCheckedIn] = useState(false);
   const userId = getCurrentUid() ?? 'me';
 
   useEffect(() => {
@@ -38,11 +45,56 @@ export default function Events() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedItem || !userId) return;
+    let unsub: (() => void) | undefined;
+    if (selectedItem.type === 'event') {
+      unsub = listenCheckInsAtEvent((selectedItem.data as Event).id, (rows) => {
+        setCheckIns(rows);
+        setHasCheckedIn(rows.some((c) => c.userId === userId));
+      });
+    } else {
+      unsub = listenCheckInsAtLocation((selectedItem.data as Location).id, (rows) => {
+        setCheckIns(rows);
+        setHasCheckedIn(rows.some((c) => c.userId === userId));
+      });
+    }
+    return () => unsub?.();
+  }, [selectedItem, userId]);
+
   const getRSVPStatus = (event: Event): 'going' | 'interested' | 'notGoing' | null => {
     if (event.rsvps.going.includes(userId)) return 'going';
     if (event.rsvps.interested.includes(userId)) return 'interested';
     if (event.rsvps.notGoing.includes(userId)) return 'notGoing';
     return null;
+  };
+
+  const handleCheckIn = async () => {
+    if (!userId || !selectedItem) return;
+    try {
+      const loc = await getCurrentLocation();
+      if (selectedItem.type === 'event') {
+        const event = selectedItem.data as Event;
+        await addCheckIn(userId, {
+          eventId: event.id,
+          placeName: event.title,
+          lat: loc?.latitude,
+          lng: loc?.longitude,
+        });
+        showToast('Checked in!', 'success');
+      } else {
+        const place = selectedItem.data as Location;
+        await addCheckIn(userId, {
+          locationId: place.id,
+          placeName: place.name,
+          lat: loc?.latitude,
+          lng: loc?.longitude,
+        });
+        showToast('Checked in!', 'success');
+      }
+    } catch {
+      showToast('Could not check in. Try again.', 'error');
+    }
   };
 
   const handleRSVP = (eventId: string, status: 'going' | 'interested' | 'notGoing') => {
@@ -111,7 +163,8 @@ export default function Events() {
     return true;
   });
 
-  const availableCities = Array.from(new Set(events.map(event => event.city || 'Near Me'))).sort();
+  const eventCities = Array.from(new Set(events.map(event => event.city || 'Near Me'))).sort();
+  const availableCities = eventCities.length > 0 ? eventCities : ['Near Me', ...usCities.map((c) => `${c.name}, ${c.state}`).sort()];
   const availableVibes = Array.from(new Set(events.flatMap(event => event.tags || []))).sort();
   const availableHosts = Array.from(new Set(events.map(event => event.organizerName))).sort();
 
@@ -161,7 +214,7 @@ export default function Events() {
             ← Back
           </button>
           {event.photo && (
-            <img src={event.photo} alt={event.title} className="detail-photo" />
+            <SafeImage src={event.photo} alt={event.title} className="detail-photo" />
           )}
           <div className="detail-content">
             <div className="detail-header">
@@ -169,7 +222,7 @@ export default function Events() {
               {event.nsfw && <span className="nsfw-badge">NSFW</span>}
             </div>
             <div className="event-organizer">
-              <img src={event.organizerPhoto} alt={event.organizerName} className="organizer-photo" />
+              <SafeImage src={event.organizerPhoto} alt={event.organizerName} className="organizer-photo" />
               <span>{event.organizerName}</span>
             </div>
             <p className="detail-description">{event.description}</p>
@@ -211,7 +264,20 @@ export default function Events() {
                   Interested
                 </button>
               )}
+              <button
+                className={`action-btn ${hasCheckedIn ? 'going' : ''}`}
+                onClick={handleCheckIn}
+                disabled={hasCheckedIn}
+              >
+                {hasCheckedIn ? '✓ Checked In' : '📍 Check In'}
+              </button>
             </div>
+            {checkIns.length > 0 && (
+              <div className="checkins-section">
+                <h4>Here now ({checkIns.length})</h4>
+                <p className="checkins-note">People who checked in at this event</p>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -222,7 +288,7 @@ export default function Events() {
           <button className="back-button" onClick={() => setSelectedItem(null)}>
             ← Back
           </button>
-          <img src={place.photo} alt={place.name} className="detail-photo" />
+          <SafeImage src={place.photo} alt={place.name} className="detail-photo" />
           <div className="detail-content">
             <div className="detail-header">
               <h2>{place.name}</h2>
@@ -241,9 +307,23 @@ export default function Events() {
               <p className="detail-description">{place.description}</p>
             )}
             <div className="detail-actions">
-              <button className="action-btn primary">Get Directions</button>
-              <button className="action-btn">Check In</button>
+              <button className="action-btn primary" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(place.address)}`, '_blank')}>
+                Get Directions
+              </button>
+              <button
+                className={`action-btn ${hasCheckedIn ? 'going' : ''}`}
+                onClick={handleCheckIn}
+                disabled={hasCheckedIn}
+              >
+                {hasCheckedIn ? '✓ Checked In' : '📍 Check In'}
+              </button>
             </div>
+            {checkIns.length > 0 && (
+              <div className="checkins-section">
+                <h4>Here now ({checkIns.length})</h4>
+                <p className="checkins-note">People who checked in at this place</p>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -258,9 +338,14 @@ export default function Events() {
           <h2>Go out, link up, or date</h2>
           <p>Find the places and events where real people are showing up.</p>
         </div>
-        <button className="create-event-btn" onClick={() => setShowCreate(true)}>
-          ➕ Create Event
-        </button>
+        <div className="events-create-buttons">
+          <button className="create-event-btn" onClick={() => setShowCreate(true)}>
+            ➕ Create Event
+          </button>
+          <button className="create-event-btn list-venue-btn" onClick={() => setShowListVenue(true)}>
+            📍 List Your Venue
+          </button>
+        </div>
         
         {/* View Mode Tabs */}
         <div className="view-mode-tabs">
@@ -393,14 +478,14 @@ export default function Events() {
           return (
             <div key={event.id} className="event-card" onClick={() => setSelectedItem({ type: 'event', data: event })}>
               {event.photo && (
-                <img src={event.photo} alt={event.title} className="event-photo" />
+                <SafeImage src={event.photo} alt={event.title} className="event-photo" />
               )}
               <div className="event-content">
                 <div className="event-header">
                   <div>
                     <h3 className="event-title">{event.title}</h3>
                     <div className="event-organizer">
-                      <img src={event.organizerPhoto} alt={event.organizerName} className="organizer-photo" />
+                      <SafeImage src={event.organizerPhoto} alt={event.organizerName} className="organizer-photo" />
                       <span>{event.organizerName}</span>
                     </div>
                   </div>
@@ -466,14 +551,14 @@ export default function Events() {
                   return (
                     <div key={event.id} className="event-card" onClick={() => setSelectedItem({ type: 'event', data: event })}>
                       {event.photo && (
-                        <img src={event.photo} alt={event.title} className="event-photo" />
+                        <SafeImage src={event.photo} alt={event.title} className="event-photo" />
                       )}
                       <div className="event-content">
                         <div className="event-header">
                           <div>
                             <h3 className="event-title">{event.title}</h3>
                             <div className="event-organizer">
-                              <img src={event.organizerPhoto} alt={event.organizerName} className="organizer-photo" />
+                              <SafeImage src={event.organizerPhoto} alt={event.organizerName} className="organizer-photo" />
                               <span>{event.organizerName}</span>
                             </div>
                           </div>
@@ -534,7 +619,7 @@ export default function Events() {
         {/* Show Places */}
         {(viewMode === 'all' || viewMode === 'places') && filteredPlaces.map((place) => (
           <div key={place.id} className="event-card place-card" onClick={() => setSelectedItem({ type: 'place', data: place })}>
-            <img src={place.photo} alt={place.name} className="event-photo" />
+            <SafeImage src={place.photo} alt={place.name} className="event-photo" />
             <div className="event-content">
               <div className="event-header">
                 <div>
@@ -590,6 +675,15 @@ export default function Events() {
             setShowCreate(false);
           }}
           onError={(message) => showToast(message, 'error')}
+        />
+      )}
+      {showListVenue && (
+        <ListVenueModal
+          onClose={() => setShowListVenue(false)}
+          onSubmit={async (loc) => {
+            await createLocation(loc);
+            showToast('Venue submitted for review! We\'ll add it soon.', 'success');
+          }}
         />
       )}
     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, LinkUpRequest } from '../types';
+import SafeImage from '../components/SafeImage';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getCurrentUid } from '../auth';
@@ -252,7 +253,7 @@ export default function Chat({ profileId }: ChatProps) {
     <div className="chat-container">
       <ToastContainer />
       <div className="chat-header">
-        <img src={profile.photo} alt={profile.name} className="chat-header-avatar" />
+        <SafeImage src={profile.photo} alt={profile.name} className="chat-header-avatar" />
         <div className="chat-header-info">
           <div className="chat-header-name">{profile.name}</div>
           <div className="chat-header-status">
@@ -313,7 +314,7 @@ export default function Chat({ profileId }: ChatProps) {
           >
             <div className="chat-message-bubble">
               {message.messageType === 'image' && message.imageUrl && (
-                <img src={message.imageUrl} alt="Shared" className="chat-message-image" />
+                <SafeImage src={message.imageUrl} alt="Shared" className="chat-message-image" />
               )}
               {message.messageType === 'voice' && (
                 <div className="chat-voice-note">

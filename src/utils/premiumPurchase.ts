@@ -4,12 +4,14 @@ import { config } from '../config/api';
 import { getOfferings, initializePurchases, purchasePackage } from './purchases';
 
 export async function runPremiumPurchase(feature: string): Promise<{ success: boolean; message: string }> {
-  // Web: use Stripe Payment Link if configured
+  // Web: use Stripe Payment Link if configured. Do NOT grant premium here - wait for webhook → Firestore.
   if (!Capacitor.isNativePlatform()) {
     const paymentLink = config.stripe?.paymentLinkUrl?.trim();
     if (paymentLink) {
-      window.open(paymentLink, '_blank', 'noopener,noreferrer');
-      return { success: true, message: 'Opened payment page. Complete checkout in the new tab.' };
+      const uid = getCurrentUid();
+      const url = uid ? `${paymentLink}${paymentLink.includes('?') ? '&' : '?'}client_reference_id=${encodeURIComponent(uid)}` : paymentLink;
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return { success: true, webOpened: true, message: 'Complete checkout in the new tab. Premium activates when payment is confirmed.' };
     }
     return { success: false, message: 'Web purchases: Add VITE_STRIPE_PAYMENT_LINK_URL to .env with your Stripe Payment Link.' };
   }

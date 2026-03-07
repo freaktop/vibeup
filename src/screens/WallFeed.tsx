@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Comments from '../components/Comments';
+import SafeImage from '../components/SafeImage';
 import StoriesViewer from '../components/StoriesViewer';
 import PullToRefresh from '../components/PullToRefresh';
 import InfiniteScroll from '../components/InfiniteScroll';
@@ -320,7 +321,7 @@ export default function WallFeed() {
         {filteredPosts.map((post) => (
           <div key={post.id} className="wallfeed-post">
             <div className="post-header">
-              <img src={post.authorPhoto} alt={post.authorName} className="post-author-photo" />
+              <SafeImage src={post.authorPhoto} alt={post.authorName} className="post-author-photo" />
               <div className="post-author-info">
                 <div className="post-author-name">{post.authorName}</div>
                 <div className="post-timestamp">{formatTime(post.timestamp)}</div>
@@ -331,7 +332,7 @@ export default function WallFeed() {
               {post.nsfw && <span className="nsfw-badge">🔞 NSFW</span>}
             </div>
             {post.image && (
-              <img 
+              <SafeImage 
                 src={post.image} 
                 alt="Post" 
                 className={`post-image ${post.nsfw && !nsfwFilter ? 'blurred' : ''}`}

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Profile } from '../types';
+import SafeImage from './SafeImage';
 import './ProfileCard.css';
 
 interface ProfileCardProps {
@@ -46,62 +47,79 @@ export default function ProfileCard({
   const startX = useRef(0);
   const startY = useRef(0);
 
-  const photos = profile.photos || [profile.photo];
-  const currentPhoto = photos[currentPhotoIndex];
+  const photos = (profile.photos?.length ? profile.photos : [profile.photo].filter(Boolean)) as string[];
+  const safePhotos = photos.length > 0 ? photos : ['https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop'];
+  const currentPhoto = safePhotos[currentPhotoIndex] || safePhotos[0];
 
-  // Swipe handlers
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
-    startY.current = e.touches[0].clientY;
-    setIsDragging(true);
-  };
+  const isDraggingRef = useRef(false);
+  const swipeOffsetRef = useRef(0);
+  const swipeUpOffsetRef = useRef(0);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging) return;
-    const deltaX = e.touches[0].clientX - startX.current;
-    const deltaY = e.touches[0].clientY - startY.current;
-    
-    // Vertical swipe for details (swipe up)
-    if (Math.abs(deltaY) > Math.abs(deltaX) && deltaY < 0) {
-      setSwipeUpOffset(Math.abs(deltaY));
-      setSwipeOffset(0); // Reset horizontal swipe
-      return;
-    }
-    
-    // Horizontal swipe for like/pass
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      setSwipeOffset(deltaX);
-      setSwipeUpOffset(0); // Reset vertical swipe
-    }
-  };
+  // Swipe handlers - use native listeners with passive for touchstart/touchend to avoid scroll-blocking violations
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
 
-  const handleTouchEnd = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    
-    const horizontalThreshold = 100;
-    const verticalThreshold = 50; // Lower threshold for swipe up
-    
-    // Check vertical swipe first (more lenient)
-    if (swipeUpOffset > verticalThreshold && onSwipeUp) {
-      setShowDetails(true);
-      setSwipeUpOffset(0);
-      onSwipeUp();
-      return;
-    }
-    
-    // Horizontal swipe
-    if (Math.abs(swipeOffset) > horizontalThreshold) {
-      if (swipeOffset > 0) {
-        onLike();
-      } else {
-        onPass();
+    const handleTouchStart = (e: TouchEvent) => {
+      startX.current = e.touches[0].clientX;
+      startY.current = e.touches[0].clientY;
+      isDraggingRef.current = true;
+      setIsDragging(true);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      const deltaX = e.touches[0].clientX - startX.current;
+      const deltaY = e.touches[0].clientY - startY.current;
+      if (Math.abs(deltaY) > Math.abs(deltaX) && deltaY < 0) {
+        const up = Math.abs(deltaY);
+        swipeUpOffsetRef.current = up;
+        swipeOffsetRef.current = 0;
+        setSwipeUpOffset(up);
+        setSwipeOffset(0);
+        return;
       }
-    }
-    
-    setSwipeOffset(0);
-    setSwipeUpOffset(0);
-  };
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        swipeOffsetRef.current = deltaX;
+        swipeUpOffsetRef.current = 0;
+        setSwipeOffset(deltaX);
+        setSwipeUpOffset(0);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      const horizontalThreshold = 100;
+      const verticalThreshold = 50;
+      const offset = swipeOffsetRef.current;
+      const upOffset = swipeUpOffsetRef.current;
+      if (upOffset > verticalThreshold && onSwipeUp) {
+        setShowDetails(true);
+        setSwipeUpOffset(0);
+        onSwipeUp();
+        setSwipeOffset(0);
+        return;
+      }
+      if (Math.abs(offset) > horizontalThreshold) {
+        if (offset > 0) onLike();
+        else onPass();
+      }
+      setSwipeOffset(0);
+      setSwipeUpOffset(0);
+    };
+
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: true });
+    el.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [onLike, onPass, onSwipeUp]);
+
 
   // Mouse handlers for desktop
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -158,7 +176,7 @@ export default function ProfileCard({
   // Photo navigation
   const nextPhoto = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (currentPhotoIndex < photos.length - 1) {
+    if (currentPhotoIndex < safePhotos.length - 1) {
       setCurrentPhotoIndex(currentPhotoIndex + 1);
     }
   };
@@ -188,18 +206,15 @@ export default function ProfileCard({
         transform: `translateX(${swipeOffset}px) translateY(${detailsOffset}px) rotate(${rotation}deg)`,
         opacity: Math.max(opacity, 0.5),
       }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
       <div className="profile-image-container">
-        <img src={currentPhoto} alt={profile.name} className="profile-image" />
+        <SafeImage src={currentPhoto} alt={profile.name} className="profile-image" />
         
-        {photos.length > 1 && (
+        {safePhotos.length > 1 && (
           <>
             <div className="photo-nav-bottom">
               {currentPhotoIndex > 0 && (
@@ -207,14 +222,14 @@ export default function ProfileCard({
                   ‹
                 </button>
               )}
-              {currentPhotoIndex < photos.length - 1 && (
+              {currentPhotoIndex < safePhotos.length - 1 && (
                 <button className="photo-nav-btn photo-nav-right" onClick={nextPhoto}>
                   ›
                 </button>
               )}
             </div>
             <div className="photo-indicators">
-              {photos.map((_, index) => (
+              {safePhotos.map((_, index) => (
                 <span
                   key={index}
                   className={`photo-dot ${index === currentPhotoIndex ? 'active' : ''}`}
@@ -236,7 +251,7 @@ export default function ProfileCard({
                 <span className="verified-badge-small">✓ Verified</span>
               )}
             </div>
-            <div className="profile-distance">{profile.distance} miles away</div>
+            <div className="profile-distance">{(profile.distance ?? 0)} miles away</div>
             {profile.sexualOrientation && (
               <div className="profile-orientation">
                 {profile.sexualOrientation}
@@ -259,7 +274,7 @@ export default function ProfileCard({
             )}
             {!showDetails && (
               <div className="profile-tags">
-                {profile.tags.slice(0, 3).map((tag, index) => (
+                {(profile.tags || []).slice(0, 3).map((tag, index) => (
                   <span key={index} className="profile-tag">{tag}</span>
                 ))}
               </div>
@@ -286,7 +301,7 @@ export default function ProfileCard({
               <div className="profile-details-section">
                 <div className="profile-details-label">Interests:</div>
                 <div className="profile-tags">
-                  {profile.tags.map((tag, index) => (
+                  {(profile.tags || []).map((tag, index) => (
                     <span key={index} className="profile-tag">{tag}</span>
                   ))}
                 </div>
@@ -306,7 +321,18 @@ export default function ProfileCard({
             <div className="first-swipe-hint">Swipe to see who's actually available nearby.</div>
           )}
           {!showDetails && !showFirstSwipeHint && (
-            <div className="swipe-up-hint">👆 Tap card for more info</div>
+            <div className="profile-info-buttons">
+              <button 
+                className="profile-info-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onProfileClick?.(profile);
+                }}
+                title="View full profile details, bio, and more"
+              >
+                👁️ Full Profile
+              </button>
+            </div>
           )}
         </div>
       </div>

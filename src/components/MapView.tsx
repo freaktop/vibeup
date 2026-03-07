@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import SafeImage from './SafeImage';
 import { Profile } from '../types';
 import { config } from '../config/api';
 import { loadMapboxGl, resetMapboxLoader } from '../utils/loadMapbox';
@@ -196,13 +197,17 @@ export default function MapView({
           if (!profile.lat || !profile.lng || !map.current) return;
 
           try {
-            // Create custom marker element
+            const photoUrl = profile.photo || profile.photos?.[0] || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop';
+            const profileName = profile.name ?? 'User';
+            const profileAge = profile.age ?? '';
+
+            // Create custom marker element - profile pic as circular marker
             const el = document.createElement('div');
             el.className = 'mapbox-marker';
-            el.style.width = '40px';
-            el.style.height = '40px';
+            el.style.width = '44px';
+            el.style.height = '44px';
             el.style.borderRadius = '50%';
-            el.style.backgroundImage = `url(${profile.photo})`;
+            el.style.backgroundImage = `url(${photoUrl})`;
             el.style.backgroundSize = 'cover';
             el.style.backgroundPosition = 'center';
             el.style.border = '3px solid #FF6B9D';
@@ -251,8 +256,8 @@ export default function MapView({
               .setPopup(
                 new mapboxgl.Popup({ offset: 25 }).setHTML(`
                   <div class="map-popup">
-                    <img src="${profile.photo}" alt="${profile.name}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-bottom: 8px;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">${profile.name}, ${profile.age}</div>
+                    <img src="${photoUrl}" alt="${profileName}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-bottom: 8px;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${profileName}${profileAge ? ', ' + profileAge : ''}</div>
                     <div style="font-size: 12px; color: #666;">${profile.distance !== undefined ? profile.distance + ' mi away' : 'Distance unknown'}</div>
                     ${profile.goingOutTonight ? '<div style="color: #7c3aed; font-size: 12px; margin-top: 4px;">🌙 Going Out Tonight</div>' : profile.hookUpNow ? '<div style="color: #FF6B9D; font-size: 12px; margin-top: 4px;">🔥 Available Now</div>' : ''}
                   </div>
@@ -401,7 +406,7 @@ export default function MapView({
       <div ref={mapContainer} className="mapbox-map" />
       {selectedProfile && (
         <div className="map-profile-preview">
-          <img src={selectedProfile.photo} alt={selectedProfile.name} className="preview-avatar" />
+          <SafeImage src={selectedProfile.photo} alt={selectedProfile.name} className="preview-avatar" />
           <div className="preview-info">
             <div className="preview-name">{selectedProfile.name}, {selectedProfile.age}</div>
             <div className="preview-distance">{selectedProfile.distance} mi away</div>

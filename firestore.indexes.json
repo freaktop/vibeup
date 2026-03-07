@@ -15,6 +15,22 @@
         {"fieldPath": "profileId", "order": "ASCENDING"},
         {"fieldPath": "viewedAt", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "checkIns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "eventId", "order": "ASCENDING"},
+        {"fieldPath": "checkInAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "checkIns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "locationId", "order": "ASCENDING"},
+        {"fieldPath": "checkInAt", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

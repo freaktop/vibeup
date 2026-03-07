@@ -223,6 +223,16 @@
   border-color: #FF6B9D;
 }
 
+.profile-detail-action-btn.follow-btn {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.profile-detail-action-btn.follow-btn.following {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
 .profile-detail-action-btn.liked {
   background: #FF6B9D;
   border-color: #FF6B9D;

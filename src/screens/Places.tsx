@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { listenLocations } from '../firestore';
+import { mockLocations } from '../data/mockLocations';
 import { Location } from '../types';
+import SafeImage from '../components/SafeImage';
 import './Places.css';
 
 type FilterType = 'all' | 'hotel' | 'bar' | 'party' | 'restaurant' | 'event' | 'venue';
@@ -18,9 +20,10 @@ export default function Places() {
     return () => unsubscribe();
   }, []);
 
+  const locationsToShow = locations.length > 0 ? locations : mockLocations;
   const filteredLocations = filter === 'all'
-    ? locations
-    : locations.filter(loc => loc.type === filter);
+    ? locationsToShow
+    : locationsToShow.filter(loc => loc.type === filter);
 
   const getTypeIcon = (type: string) => {
     const icons: Record<string, string> = {
@@ -118,7 +121,7 @@ export default function Places() {
             onClick={() => setSelectedLocation(location)}
           >
             <div className="location-card-image-container">
-              <img src={location.photo} alt={location.name} className="location-card-image" />
+              <SafeImage src={location.photo} alt={location.name} className="location-card-image" />
               <div className="location-card-overlay">
                 <span className="location-type-icon">{getTypeIcon(location.type)}</span>
                 {location.rating && (

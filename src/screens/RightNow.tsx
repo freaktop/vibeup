@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProfileCard from '../components/ProfileCard';
+import SafeImage from '../components/SafeImage';
 import MatchAnimation from '../components/MatchAnimation';
 import PremiumModal from '../components/PremiumModal';
 import PullToRefresh from '../components/PullToRefresh';
@@ -9,12 +10,14 @@ import { storage } from '../utils/storage';
 import { shareProfile } from '../utils/shareProfile';
 import { runPremiumPurchase } from '../utils/premiumPurchase';
 import { useToast } from '../hooks/useToast';
+import { usePremiumContext } from '../contexts/PremiumContext';
 import { Profile, Event } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getCurrentUid } from '../auth';
 import { createReport, listenEvents, listenMySwipes, listenProfiles, removeSwipe, setEventRsvp, setSwipe, unmatch, type SwipeType } from '../firestore';
 import { enrichProfilesWithDistance } from '../utils/geolocation';
+import { normalizeProfile } from '../utils/normalizeProfile';
 import './RightNow.css';
 
 export default function RightNow() {
@@ -28,7 +31,7 @@ export default function RightNow() {
   const [blockedProfiles, setBlockedProfiles] = useState<string[]>([]);
   const [showMatchAnimation, setShowMatchAnimation] = useState(false);
   const [matchedProfile, setMatchedProfile] = useState<Profile | null>(null);
-  const [premiumFeatures, setPremiumFeatures] = useState(storage.getPremiumFeatures());
+  const premiumFeatures = usePremiumContext();
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -159,7 +162,6 @@ export default function RightNow() {
 
     if (!premiumFeatures.hasPremium) {
       const updated = { ...premiumFeatures, superLikesRemaining: premiumFeatures.superLikesRemaining - 1 };
-      setPremiumFeatures(updated);
       storage.savePremiumFeatures(updated);
     }
 
@@ -296,6 +298,12 @@ export default function RightNow() {
       setShowPremiumModal(false);
       return;
     }
+    // Web: opening Stripe link - do NOT grant premium. Webhook → Firestore will update when paid.
+    if ((purchase as { webOpened?: boolean }).webOpened) {
+      showToast(purchase.message || 'Complete checkout in the new tab. Premium activates when payment is confirmed.', 'info');
+      setShowPremiumModal(false);
+      return;
+    }
 
     let updated = { ...premiumFeatures };
     
@@ -313,7 +321,6 @@ export default function RightNow() {
       updated.superLikesRemaining += 5;
     }
     
-    setPremiumFeatures(updated);
     storage.savePremiumFeatures(updated);
     showToast(`Purchase successful: ${feature} activated.`, 'success');
     setShowPremiumModal(false);
@@ -441,7 +448,7 @@ export default function RightNow() {
             return (
               <ProfileCard
                 key={profile.id}
-                profile={profile}
+                profile={normalizeProfile(profile)}
                 onLike={() => handleLike(profile.id)}
                 onPass={() => handlePass(profile.id)}
                 onSuperLike={() => handleSuperLike(profile.id)}
@@ -459,28 +466,31 @@ export default function RightNow() {
         ) : (
           // Grid view - show all available profiles
           <div className="rightnow-grid">
-            {profiles.map((profile) => (
+            {profiles.map((profile) => {
+              const safe = normalizeProfile(profile);
+              return (
               <div
-                key={profile.id}
+                key={safe.id}
                 className="rightnow-grid-item"
                 onClick={() => {
-                  const index = profiles.findIndex(p => p.id === profile.id);
+                  const index = profiles.findIndex(p => p.id === safe.id);
                   if (index !== -1) {
                     setCurrentIndex(index);
                     setViewMode('card');
                   }
                 }}
               >
-                <img src={profile.photo} alt={profile.name} className="grid-item-photo" />
+                <SafeImage src={safe.photo} alt={safe.name} className="grid-item-photo" />
                 <div className="grid-item-info">
-                  <div className="grid-item-name">{profile.name}, {profile.age}</div>
-                  <div className="grid-item-distance">{profile.distance} mi away</div>
+                  <div className="grid-item-name">{safe.name}, {safe.age}</div>
+                  <div className="grid-item-distance">{safe.distance ?? 0} mi away</div>
                   <div className="grid-item-badge">
-                    {profile.goingOutTonight ? '🌙 Out Tonight' : '🔥 Available Now'}
+                    {safe.goingOutTonight ? '🌙 Out Tonight' : '🔥 Available Now'}
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
 

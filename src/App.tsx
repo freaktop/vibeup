@@ -5,7 +5,7 @@ import { storage } from './utils/storage';
 import { useAuth } from './contexts/AuthContext';
 import { auth } from './firebase';
 import { getCurrentUid, isDemoMode } from './auth';
-import { listenNotifications } from './firestore';
+import { listenNotifications, getProfile } from './firestore';
 import './App.css';
 
 const Discover = lazy(() => import('./screens/Discover'));
@@ -49,11 +49,36 @@ function App() {
   useEffect(() => {
     if (!authResolved) return;
     if (user) {
-      if (storage.isOnboardingComplete()) {
-        setView('main');
-      } else {
-        setView('onboarding');
-      }
+      // Check if user has completed onboarding via Firestore profile or local storage
+      const checkOnboardingStatus = async () => {
+        const uid = getCurrentUid();
+        if (!uid) return;
+        
+        // First check local storage for fast feedback
+        if (storage.isOnboardingComplete()) {
+          setView('main');
+          return;
+        }
+        
+        // Then check if user has a profile in Firestore (indicates onboarding was completed)
+        try {
+          const profile = await getProfile(uid);
+          if (profile) {
+            // User has a profile, mark onboarding as complete locally
+            storage.setOnboardingComplete(true);
+            setView('main');
+          } else {
+            // No profile yet, show onboarding
+            setView('onboarding');
+          }
+        } catch (err) {
+          console.error('Error checking profile status:', err);
+          // Fallback: show onboarding if we can't check
+          setView('onboarding');
+        }
+      };
+      
+      checkOnboardingStatus();
     } else {
       setView('login');
     }

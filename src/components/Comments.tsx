@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../utils/storage';
+import SafeImage from './SafeImage';
 import { Comment } from '../types';
 import './Comments.css';
 
@@ -77,7 +78,7 @@ export default function Comments({ postId, comments, onAddComment, onClose }: Co
           ) : (
             localComments.map((comment) => (
               <div key={comment.id} className="comment-item">
-                <img src={comment.authorPhoto} alt={comment.authorName} className="comment-avatar" />
+                <SafeImage src={comment.authorPhoto} alt={comment.authorName} className="comment-avatar" />
                 <div className="comment-content">
                   <div className="comment-header">
                     <span className="comment-author">{comment.authorName}</span>
