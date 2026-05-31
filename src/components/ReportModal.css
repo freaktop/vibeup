@@ -1,0 +1,49 @@
+.report-modal {
+  width: min(420px, calc(100vw - 32px));
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.report-modal h3 {
+  margin: 0 0 8px;
+}
+
+.report-modal p {
+  margin: 0 0 12px;
+  color: #666;
+  font-size: 14px;
+}
+
+.report-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.report-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.report-btn.cancel {
+  background: #f3f3f3;
+}
+
+.report-btn.submit {
+  background: #ff6b9d;
+  color: #fff;
+}

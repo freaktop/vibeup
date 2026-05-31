@@ -1,0 +1,154 @@
+.admin-container {
+  padding: 16px;
+  background: #fff;
+  min-height: 100%;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.admin-clear-btn {
+  background: #ff4444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+}
+
+.admin-empty {
+  padding: 16px;
+  color: #999;
+  background: #f9f9f9;
+  border-radius: 10px;
+}
+
+.admin-report {
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.admin-report.resolved {
+  opacity: 0.7;
+}
+
+.admin-report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.admin-report-type {
+  font-size: 12px;
+  font-weight: 700;
+  color: #FF6B9D;
+}
+
+.admin-report-status {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #999;
+}
+
+.admin-report-status.open {
+  color: #ff6b6b;
+}
+
+.admin-report-target {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.admin-report-reason {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.admin-report-meta {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.admin-action-btn {
+  background: #FF6B9D;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.admin-modal-content {
+  width: 100%;
+  max-width: 380px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.admin-modal-content h3 {
+  margin: 0 0 8px;
+}
+
+.admin-modal-content p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.admin-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.admin-modal-btn {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-modal-btn.cancel {
+  background: #f2f2f2;
+  color: #666;
+}
+
+.admin-modal-btn.danger {
+  background: #ff4444;
+  color: #fff;
+}

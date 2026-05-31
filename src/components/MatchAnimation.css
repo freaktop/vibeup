@@ -1,0 +1,154 @@
+.match-animation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.9);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.match-animation-content {
+  text-align: center;
+  color: #fff;
+  animation: slideUp 0.5s;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.match-hearts {
+  position: relative;
+  height: 100px;
+  margin-bottom: 20px;
+}
+
+.heart {
+  position: absolute;
+  font-size: 60px;
+  animation: float 2s infinite;
+}
+
+.heart-1 {
+  left: 50%;
+  transform: translateX(-50%);
+  animation-delay: 0s;
+}
+
+.heart-2 {
+  left: 30%;
+  animation-delay: 0.3s;
+}
+
+.heart-3 {
+  left: 70%;
+  animation-delay: 0.6s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-30px) scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+.match-title {
+  font-size: 48px;
+  font-weight: bold;
+  margin: 0 0 12px 0;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.match-subtitle {
+  font-size: 20px;
+  margin-bottom: 32px;
+  opacity: 0.9;
+}
+
+.match-photos {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.match-photo-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  border: 4px solid #FF6B9D;
+  overflow: hidden;
+  animation: bounce 1s infinite;
+}
+
+.match-photo-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.match-button {
+  background: #FF6B9D;
+  color: #fff;
+  border: none;
+  padding: 16px 32px;
+  border-radius: 24px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+  width: 100%;
+  max-width: 280px;
+  margin-bottom: 12px;
+}
+
+.match-button:hover {
+  transform: scale(1.05);
+}
+
+.match-button:active {
+  transform: scale(0.95);
+}
+
+.match-button-secondary {
+  background: transparent;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.match-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.8);
+}

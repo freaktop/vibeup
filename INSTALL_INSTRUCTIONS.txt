@@ -1,0 +1,64 @@
+HOW TO INSTALL THE APK ON YOUR ANDROID DEVICE
+==============================================
+
+STEP 1: LOCATE THE APK FILE
+----------------------------
+The APK file is located at:
+C:\Users\model\Documents\apps\mobile-web\android\app\build\outputs\apk\debug\app-debug.apk
+
+STEP 2: TRANSFER TO YOUR PHONE
+-------------------------------
+Option A - USB Cable:
+1. Connect your Android phone to your computer via USB cable
+2. On your phone, when prompted, select "File Transfer" or "MTP" mode
+3. Open File Explorer on your computer
+4. Navigate to the folder above
+5. Copy "app-debug.apk" file
+6. Paste it to your phone (usually appears as a drive in File Explorer)
+7. Paste into the "Downloads" folder on your phone
+
+Option B - Email/Cloud:
+1. Email the "app-debug.apk" file to yourself
+2. Open the email on your phone
+3. Download the attachment
+4. The file will be in your Downloads folder
+
+STEP 3: INSTALL ON YOUR PHONE
+------------------------------
+1. On your Android phone, open the "Files" or "File Manager" app
+2. Navigate to the "Downloads" folder
+3. Find "app-debug.apk" file
+4. Tap on it
+5. If you see a warning about "Unknown Sources":
+   - Tap "Settings"
+   - Turn ON "Allow from this source" or "Install unknown apps"
+   - Go back and tap the APK again
+6. Tap "Install"
+7. Wait for installation to complete
+8. Tap "Open" or find "VibeUp" in your app drawer
+
+STEP 4: TEST THE APP
+---------------------
+Once installed, open VibeUp and you should see:
+✓ Grid view in Discover tab (not swipe cards)
+✓ 4 sub-tabs: Near Me, Right Now, Dating, Going Out
+✓ More profiles (15 total)
+✓ Profile detail modal when tapping profiles
+✓ Loading states
+✓ Better error messages
+
+TROUBLESHOOTING ADB (If you want automatic install)
+----------------------------------------------------
+If you want adb to work for automatic installs:
+
+1. On your phone: Settings > About Phone
+2. Tap "Build Number" 7 times (enables Developer Options)
+3. Go back to Settings > Developer Options
+4. Turn ON "USB Debugging"
+5. Connect phone via USB
+6. On phone, when popup appears: "Allow USB debugging?" → Tap ALLOW
+7. Check "Always allow from this computer" if prompted
+8. Run: adb devices (should show your device)
+
+Then I can install automatically with:
+adb install -r app-debug.apk
