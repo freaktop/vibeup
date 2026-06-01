@@ -72,13 +72,16 @@ export async function initializeNotifications(): Promise<void> {
       // Don't crash - just log and continue
     }
 
-    // OneSignal integration can be added via Capacitor plugin
-    // For now, using Capacitor PushNotifications
-    if (config.onesignal.appId) {
-      logger.log('OneSignal App ID configured:', config.onesignal.appId);
-      // OneSignal SDK initialization would go here
-      // Typically done via Capacitor plugin or web SDK
-      // Example: await OneSignal.setAppId(config.onesignal.appId);
+    if (config.onesignal.appId && typeof window !== 'undefined' && 'OneSignal' in window) {
+      try {
+        const OneSignal = (window as any).OneSignal;
+        if (OneSignal && typeof OneSignal.init === 'function') {
+          await OneSignal.init({ appId: config.onesignal.appId });
+          logger.log('OneSignal initialized');
+        }
+      } catch (e) {
+        logger.warn('OneSignal init failed (non-fatal):', e);
+      }
     }
   } catch (error) {
     // Catch all errors and log them without crashing the app
