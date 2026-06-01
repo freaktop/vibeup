@@ -76,7 +76,11 @@ export async function initializeNotifications(): Promise<void> {
       try {
         const OneSignal = (window as any).OneSignal;
         if (OneSignal && typeof OneSignal.init === 'function') {
-          await OneSignal.init({ appId: config.onesignal.appId });
+          await OneSignal.init({
+            appId: config.onesignal.appId,
+            serviceWorkerPath: 'onesignal/OneSignalSDKWorker.js',
+            serviceWorkerParam: { scope: '/onesignal/' },
+          });
           logger.log('OneSignal initialized');
         }
       } catch (e) {
