@@ -108,6 +108,12 @@ export default function Places() {
         >
           🎪 Events
         </button>
+        <button
+          className={`filter-tag ${filter === 'venue' ? 'active' : ''}`}
+          onClick={() => setFilter('venue')}
+        >
+          🎭 Venues
+        </button>
       </div>
 
       <div className="explore-grid">
