@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { listenLocations } from '../firestore';
-import { mockLocations } from '../data/mockLocations';
 import { Location } from '../types';
 import SafeImage from '../components/SafeImage';
 import './Places.css';
@@ -20,7 +19,7 @@ export default function Places() {
     return () => unsubscribe();
   }, []);
 
-  const locationsToShow = locations.length > 0 ? locations : mockLocations;
+  const locationsToShow = locations;
   const filteredLocations = filter === 'all'
     ? locationsToShow
     : locationsToShow.filter(loc => loc.type === filter);

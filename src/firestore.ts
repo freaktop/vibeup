@@ -24,7 +24,6 @@ import { db } from './firebase';
 import { getCurrentUid, getCurrentUser, isDemoMode } from './auth';
 import { storage } from './utils/storage';
 import type { ChatMessage, Comment, Community, Event, Location, Notification, Post, Profile, Report, UserProfile } from './types';
-import { mockProfiles } from './data/mockProfiles';
 
 export type SwipeType = 'like' | 'pass' | 'superlike' | 'block' | 'save';
 
@@ -135,53 +134,12 @@ export async function upsertMyProfile(userProfile: UserProfile | null | undefine
 }
 
 export async function seedMockProfilesIfEmpty(): Promise<{ seeded: boolean; count: number }> {
-  if (isDemoMode() || !db) return { seeded: false, count: 0 };
-  requireUid();
-
-  const existing = await getDocs(query(collection(requireDb(), 'profiles'), limit(1)));
-  if (!existing.empty) {
-    return { seeded: false, count: 0 };
-  }
-
-  const batch = writeBatch(requireDb());
-  for (const p of mockProfiles) {
-    const id = `seed_${p.id}`;
-    const ref = doc(requireDb(), 'profiles', id);
-    batch.set(ref, {
-      name: p.name,
-      age: p.age,
-      distance: p.distance,
-      photo: p.photo,
-      photos: p.photos || [],
-      tags: p.tags || [],
-      bio: p.bio || '',
-      lat: p.lat ?? null,
-      lng: p.lng ?? null,
-      sexualOrientation: p.sexualOrientation ?? null,
-      lookingFor: p.lookingFor || [],
-      hookUpNow: p.hookUpNow || false,
-      pronouns: p.pronouns ?? null,
-      genderIdentity: p.genderIdentity ?? null,
-      kinks: p.kinks || [],
-      intent: p.intent ?? null,
-      vibeStyle: p.vibeStyle ?? null,
-      verified: p.verified || false,
-      photoBlurEnabled: p.photoBlurEnabled || false,
-      anonymous: p.anonymous || false,
-      safeMode: p.safeMode || false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  }
-
-  await batch.commit();
-  return { seeded: true, count: mockProfiles.length };
+  return { seeded: false, count: 0 };
 }
 
 export function listenProfiles(onChange: (profiles: Profile[]) => void): Unsubscribe {
   if (isDemoMode() || !db) {
-    const mock = mockProfiles.map((p) => ({ ...p, id: p.id, online: true })) as Profile[];
-    onChange(mock);
+    onChange([]);
     return () => {};
   }
   const uid = getCurrentUid();
@@ -226,8 +184,7 @@ export function listenProfiles(onChange: (profiles: Profile[]) => void): Unsubsc
 /** Same as listenProfiles but includes the current user's profile (for map) */
 export function listenProfilesRaw(onChange: (profiles: Profile[]) => void): Unsubscribe {
   if (isDemoMode() || !db) {
-    const mock = mockProfiles.map((p) => ({ ...p, id: p.id, online: true })) as Profile[];
-    onChange(mock);
+    onChange([]);
     return () => {};
   }
   const q = query(collection(requireDb(), 'profiles'), limit(200));
@@ -263,7 +220,7 @@ export function listenProfilesRaw(onChange: (profiles: Profile[]) => void): Unsu
 
 export async function getProfile(profileId: string): Promise<Profile | null> {
   if (isDemoMode()) {
-    return mockProfiles.find(p => p.id === profileId) || null;
+    return null;
   }
   if (!db) return null;
   const ref = doc(db, 'profiles', profileId);

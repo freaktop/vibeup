@@ -52,7 +52,7 @@ export default function Profile() {
   const [relationshipStatus, setRelationshipStatus] = useState('');
   const [hivStatus, setHivStatus] = useState('');
   const [nsfwEnabled, setNsfwEnabled] = useState(false);
-  const [photoRulesAccepted, setPhotoRulesAccepted] = useState(false);
+  const [photoRulesAccepted, setPhotoRulesAccepted] = useState(true);
   const [allowBlurredBody, setAllowBlurredBody] = useState(true);
   const [prompts, setPrompts] = useState<{ question: string; answer: string }[]>([]);
   const [showPromptModal, setShowPromptModal] = useState(false);

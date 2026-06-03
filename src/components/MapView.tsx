@@ -65,6 +65,7 @@ export default function MapView({
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
   const [isLoadingMap, setIsLoadingMap] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [mapsLoaded, setMapsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +83,7 @@ export default function MapView({
       if (window.google && window.google.maps) {
         if (!cancelled) {
           setIsLoadingMap(false);
+          setMapsLoaded(true);
         }
         return;
       }
@@ -95,6 +97,7 @@ export default function MapView({
       window.initMapCallback = () => {
         if (!cancelled) {
           setIsLoadingMap(false);
+          setMapsLoaded(true);
         }
       };
 
@@ -155,7 +158,7 @@ export default function MapView({
       console.log('Initializing Google Maps map...');
 
       // Initialize map
-      map.current = new window.google.maps.Map(mapContainer.current, {
+      const mapOptions: any = {
         center: { lat: centerLat, lng: centerLng },
         zoom: zoom,
         styles: [
@@ -165,7 +168,11 @@ export default function MapView({
             stylers: [{ visibility: 'off' }],
           },
         ],
-      });
+      };
+      if (config.googleMaps.mapId) {
+        mapOptions.mapId = config.googleMaps.mapId;
+      }
+      map.current = new window.google.maps.Map(mapContainer.current, mapOptions);
 
       console.log('Map loaded successfully');
       trackEvent('map_view_ready');
@@ -194,7 +201,7 @@ export default function MapView({
     } catch (error) {
       console.error('Error initializing map:', error);
     }
-  }, [centerLat, centerLng, zoom]); // Initialize when Google Maps is loaded
+  }, [centerLat, centerLng, zoom, mapsLoaded]); // Initialize when Google Maps is loaded
 
   // Apply map theme styles
   useEffect(() => {
@@ -352,7 +359,7 @@ export default function MapView({
                 title: `${profileName}${profileAge ? ', ' + profileAge : ''}${dist ? ' · ' + dist : ''}`,
                 content: container,
               });
-              marker.addListener('click', () => {
+              marker.addListener('gmp-click', () => {
                 try {
                   setSelectedProfile(profile);
                   onProfileClick(profile);
