@@ -38,13 +38,24 @@ export default function Profile() {
   const [pronouns, setPronouns] = useState('He/Him');
   const [genderIdentity, setGenderIdentity] = useState('Man');
   const [kinks, setKinks] = useState<string[]>([]);
+  const [video, setVideo] = useState('');
+  const [albums, setAlbums] = useState<{ name: string; photos: string[] }[]>([]);
+  const [showAlbumModal, setShowAlbumModal] = useState(false);
+  const [newAlbumName, setNewAlbumName] = useState('');
   const [photoBlurEnabled, setPhotoBlurEnabled] = useState(false);
   const [verified, setVerified] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
   const [safeMode, setSafeMode] = useState(false);
+  const [ghostMode, setGhostMode] = useState(false);
+  const [visibleOnMap, setVisibleOnMap] = useState(false);
+  const [tribe, setTribe] = useState('');
+  const [relationshipStatus, setRelationshipStatus] = useState('');
+  const [hivStatus, setHivStatus] = useState('');
   const [nsfwEnabled, setNsfwEnabled] = useState(false);
   const [photoRulesAccepted, setPhotoRulesAccepted] = useState(false);
   const [allowBlurredBody, setAllowBlurredBody] = useState(true);
+  const [prompts, setPrompts] = useState<{ question: string; answer: string }[]>([]);
+  const [showPromptModal, setShowPromptModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState('');
@@ -68,6 +79,9 @@ export default function Profile() {
   const bodyTypeOptions = ['Slim', 'Athletic', 'Average', 'Muscular', 'Bear', 'Dad bod', 'Prefer not to say'];
   const roleOptions = ['Top', 'Bottom', 'Versatile', 'Side', 'Prefer not to say'];
   const intoOptions = ['Men', 'Women', 'Trans', 'Non-binary', 'Everyone'];
+  const tribeOptions = ['Bear', 'Otter', 'Jock', 'Twink', 'Daddy', 'Trans', 'Leather', 'Punk', 'Geek', 'Gym', 'Muscle', 'Chub', 'Skinny', 'Drag', 'Queer', 'Bi'];
+  const relationshipOptions = ['Single', 'Dating', 'Open relationship', 'Married', 'Polyamorous', 'Prefer not to say'];
+  const hivOptions = ['Negative', 'Positive', 'Undetectable', 'On PrEP', 'Prefer not to say'];
 
   useEffect(() => {
     loadProfile();
@@ -113,6 +127,8 @@ export default function Profile() {
               verified: firestoreProfile.verified ?? profile?.verified,
               anonymous: firestoreProfile.anonymous ?? profile?.anonymous,
               safeMode: firestoreProfile.safeMode ?? profile?.safeMode,
+              ghostMode: (firestoreProfile as any).ghostMode ?? profile?.ghostMode,
+              visibleOnMap: (firestoreProfile as any).visibleOnMap ?? profile?.visibleOnMap,
               nsfwEnabled: (firestoreProfile as any).nsfwEnabled ?? profile?.nsfwEnabled,
               photoRulesAccepted: (firestoreProfile as any).photoRulesAccepted ?? profile?.photoRulesAccepted,
               allowBlurredBody: (firestoreProfile as any).allowBlurredBody ?? profile?.allowBlurredBody,
@@ -149,12 +165,20 @@ export default function Profile() {
         setGenderIdentity(profile.genderIdentity || 'Man');
         setKinks(profile.kinks || []);
         setPhotoBlurEnabled(profile.photoBlurEnabled || false);
+        setVideo(profile.video || '');
+        setAlbums(profile.albums || []);
         setVerified(profile.verified || false);
         setAnonymous(profile.anonymous || false);
         setSafeMode(profile.safeMode || false);
+        setGhostMode(profile.ghostMode || false);
+        setVisibleOnMap(profile.visibleOnMap || false);
         setNsfwEnabled(profile.nsfwEnabled || false);
         setPhotoRulesAccepted(profile.photoRulesAccepted || false);
         setAllowBlurredBody(profile.allowBlurredBody ?? true);
+        setTribe(profile.tribe || '');
+        setRelationshipStatus(profile.relationshipStatus || '');
+        setHivStatus(profile.hivStatus || '');
+        setPrompts((profile as any).prompts || []);
       }
     } catch (err) {
       console.error('Error loading profile:', err);
@@ -253,9 +277,17 @@ export default function Profile() {
         verified,
         anonymous,
         safeMode,
+        ghostMode,
+        visibleOnMap,
         nsfwEnabled,
         photoRulesAccepted,
         allowBlurredBody,
+        tribe: tribe || undefined,
+        relationshipStatus: relationshipStatus || undefined,
+        hivStatus: hivStatus || undefined,
+        video: video || undefined,
+        albums: albums.length > 0 ? albums : undefined,
+        prompts: prompts.length > 0 ? prompts : undefined,
       };
       
       storage.saveUserProfile(profile);
@@ -428,6 +460,38 @@ export default function Profile() {
         boostsRemaining: 999,
         superLikesRemaining: 999,
         undosRemaining: 999,
+        canSeeViewers: true,
+        canJoinExclusiveCommunities: true,
+      };
+    } else if (feature === 'premier') {
+      updated = {
+        ...updated,
+        hasPremium: true,
+        hasPremier: true,
+        hasBoost: true,
+        hasSuperLike: true,
+        hasUndo: true,
+        boostsRemaining: 999,
+        superLikesRemaining: 999,
+        undosRemaining: 999,
+        canSeeViewers: true,
+        canJoinExclusiveCommunities: true,
+      };
+    } else if (feature === 'elite') {
+      updated = {
+        ...updated,
+        hasPremium: true,
+        hasPremier: true,
+        hasElite: true,
+        hasBoost: true,
+        hasSuperLike: true,
+        hasUndo: true,
+        boostsRemaining: 999,
+        superLikesRemaining: 999,
+        undosRemaining: 999,
+        canSeeViewers: true,
+        canJoinExclusiveCommunities: true,
+        verifiedBadge: true,
       };
     }
     
@@ -767,6 +831,63 @@ export default function Profile() {
         </div>
 
         <div className="profile-section">
+          <label className="profile-label">Tribe</label>
+          {isEditing ? (
+            <div className="profile-looking-for-options">
+              {tribeOptions.map((option) => (
+                <button
+                  key={option}
+                  className={`profile-looking-for-btn ${tribe === option ? 'active' : ''}`}
+                  onClick={() => setTribe(tribe === option ? '' : option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="profile-value">{tribe || 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">Relationship Status</label>
+          {isEditing ? (
+            <div className="profile-looking-for-options">
+              {relationshipOptions.map((option) => (
+                <button
+                  key={option}
+                  className={`profile-looking-for-btn ${relationshipStatus === option ? 'active' : ''}`}
+                  onClick={() => setRelationshipStatus(relationshipStatus === option ? '' : option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="profile-value">{relationshipStatus || 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <label className="profile-label">HIV Status</label>
+          {isEditing ? (
+            <div className="profile-looking-for-options">
+              {hivOptions.map((option) => (
+                <button
+                  key={option}
+                  className={`profile-looking-for-btn ${hivStatus === option ? 'active' : ''}`}
+                  onClick={() => setHivStatus(hivStatus === option ? '' : option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="profile-value">{hivStatus || 'Not set'}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
           <label className="profile-label">Hook Up Now</label>
           {isEditing ? (
             <div className="profile-toggle">
@@ -804,6 +925,35 @@ export default function Profile() {
             />
           ) : (
             <div className="profile-value">{bio}</div>
+          )}
+        </div>
+
+        <div className="profile-section">
+          <div className="profile-interests-header">
+            <label className="profile-label">Prompts</label>
+            {isEditing && (
+              <button className="profile-add-interest" onClick={() => setShowPromptModal(true)}>
+                ➕
+              </button>
+            )}
+          </div>
+          {prompts.length === 0 ? (
+            <div className="profile-value">No prompts yet</div>
+          ) : (
+            prompts.map((prompt, index) => (
+              <div key={index} className="profile-prompt-card">
+                <div className="profile-prompt-question">{prompt.question}</div>
+                <div className="profile-prompt-answer">{prompt.answer}</div>
+                {isEditing && (
+                  <button
+                    className="profile-prompt-remove"
+                    onClick={() => setPrompts(prompts.filter((_, i) => i !== index))}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))
           )}
         </div>
 
@@ -868,6 +1018,86 @@ export default function Profile() {
         </div>
 
         <div className="profile-section">
+          <label className="profile-label">Intro Video</label>
+          {video ? (
+            <div className="profile-video-preview">
+              <video src={video} controls className="profile-video" />
+              {isEditing && (
+                <button className="profile-remove-video" onClick={() => setVideo('')}>✕</button>
+              )}
+            </div>
+          ) : (
+            <div className="profile-value">No intro video</div>
+          )}
+          {isEditing && (
+            <input
+              type="file"
+              accept="video/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const { uploadProfileVideo } = await import('../utils/uploadImage');
+                const url = await uploadProfileVideo(file);
+                setVideo(url);
+              }}
+              style={{ marginTop: 8 }}
+            />
+          )}
+        </div>
+
+        <div className="profile-section">
+          <div className="profile-interests-header">
+            <label className="profile-label">Photo Albums</label>
+            {isEditing && (
+              <button className="profile-add-interest" onClick={() => setShowAlbumModal(true)}>
+                ➕
+              </button>
+            )}
+          </div>
+          {albums.length === 0 ? (
+            <div className="profile-value">No albums yet</div>
+          ) : (
+            albums.map((album, idx) => (
+              <div key={idx} className="profile-album">
+                <div className="profile-album-header">
+                  <span className="profile-album-name">{album.name}</span>
+                  {isEditing && (
+                    <button className="profile-remove-interest" onClick={() => setAlbums(albums.filter((_, i) => i !== idx))}>✕</button>
+                  )}
+                </div>
+                <div className="profile-album-photos">
+                  {album.photos.map((photo, pidx) => (
+                    <SafeImage key={pidx} src={photo} alt="" className="profile-album-photo" />
+                  ))}
+                  {isEditing && (
+                    <button
+                      className="profile-add-album-photo"
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/*';
+                        input.onchange = async () => {
+                          const file = input.files?.[0];
+                          if (!file) return;
+                          const { uploadAlbumPhoto } = await import('../utils/uploadImage');
+                          const url = await uploadAlbumPhoto(file, album.name);
+                          const updated = [...albums];
+                          updated[idx] = { ...updated[idx], photos: [...updated[idx].photos, url] };
+                          setAlbums(updated);
+                        };
+                        input.click();
+                      }}
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="profile-section">
           <label className="profile-label">Privacy & Safety</label>
           <div className="profile-toggle-section">
             <div className="profile-toggle-item">
@@ -916,6 +1146,38 @@ export default function Profile() {
                 }}
               >
                 {safeMode ? 'ON' : 'OFF'}
+              </button>
+            </div>
+            <div className="profile-toggle-item">
+              <span>Ghost Mode (Hidden from searches)</span>
+              <button
+                className={`toggle-btn ${ghostMode ? 'active' : ''}`}
+                onClick={() => {
+                  const newValue = !ghostMode;
+                  setGhostMode(newValue);
+                  const profile = storage.getUserProfile() || {};
+                  const updatedProfile = { ...profile, ghostMode: newValue };
+                  storage.saveUserProfile(updatedProfile);
+                  window.dispatchEvent(new CustomEvent('profileUpdated'));
+                }}
+              >
+                {ghostMode ? 'ON' : 'OFF'}
+              </button>
+            </div>
+            <div className="profile-toggle-item">
+              <span>Visible on Map</span>
+              <button
+                className={`toggle-btn ${visibleOnMap ? 'active' : ''}`}
+                onClick={() => {
+                  const newValue = !visibleOnMap;
+                  setVisibleOnMap(newValue);
+                  const profile = storage.getUserProfile() || {};
+                  const updatedProfile = { ...profile, visibleOnMap: newValue };
+                  storage.saveUserProfile(updatedProfile);
+                  window.dispatchEvent(new CustomEvent('profileUpdated'));
+                }}
+              >
+                {visibleOnMap ? 'ON' : 'OFF'}
               </button>
             </div>
             <div className="profile-toggle-item">
@@ -1006,6 +1268,33 @@ export default function Profile() {
               <div>
                 <div className="premium-feature-title">VibeUp Premium</div>
                 <div className="premium-feature-desc">$9.99/mo · Who viewed you, unlimited likes & more</div>
+              </div>
+              <span>→</span>
+            </button>
+            <button
+              className="premium-feature-btn"
+              onClick={async () => {
+                if (premiumFeatures.boostsRemaining > 0 || premiumFeatures.hasPremium) {
+                  const now = Date.now();
+                  const expireAt = now + 3600000; // 1 hour boost
+                  const { upsertMyProfile } = await import('../firestore');
+                  await upsertMyProfile({ boostExpiresAt: expireAt } as any).catch(() => {});
+                  if (!premiumFeatures.hasPremium) {
+                    const updated = { ...premiumFeatures, boostsRemaining: premiumFeatures.boostsRemaining - 1 };
+                    storage.savePremiumFeatures(updated);
+                    window.dispatchEvent(new CustomEvent('premiumUpdated'));
+                  }
+                  showToast('Profile boosted for 1 hour!', 'success');
+                } else {
+                  setPremiumFeature('boost');
+                  setShowPremiumModal(true);
+                }
+              }}
+            >
+              <span>🚀</span>
+              <div>
+                <div className="premium-feature-title">Boost Profile</div>
+                <div className="premium-feature-desc">Top of everyone's grid for 1 hour · {premiumFeatures.boostsRemaining} left</div>
               </div>
               <span>→</span>
             </button>
@@ -1103,6 +1392,30 @@ export default function Profile() {
         </div>
       )}
 
+      {showAlbumModal && (
+        <div className="profile-modal-overlay" onClick={() => setShowAlbumModal(false)}>
+          <div className="profile-modal-content" onClick={(event) => event.stopPropagation()}>
+            <h3>Create Photo Album</h3>
+            <input
+              className="profile-modal-input"
+              value={newAlbumName}
+              onChange={(event) => setNewAlbumName(event.target.value)}
+              placeholder="Album name (e.g. Vacation, Night Out)"
+            />
+            <div className="profile-modal-actions">
+              <button className="profile-modal-btn cancel" onClick={() => setShowAlbumModal(false)}>Cancel</button>
+              <button className="profile-modal-btn save" onClick={() => {
+                const name = newAlbumName.trim();
+                if (!name) { showToast('Enter an album name.', 'info'); return; }
+                setAlbums([...albums, { name, photos: [] }]);
+                setNewAlbumName('');
+                setShowAlbumModal(false);
+              }}>Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showKinkModal && (
         <div className="profile-modal-overlay" onClick={() => setShowKinkModal(false)}>
           <div className="profile-modal-content" onClick={(event) => event.stopPropagation()}>
@@ -1116,6 +1429,48 @@ export default function Profile() {
             <div className="profile-modal-actions">
               <button className="profile-modal-btn cancel" onClick={() => setShowKinkModal(false)}>Cancel</button>
               <button className="profile-modal-btn save" onClick={addKink}>Add</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPromptModal && (
+        <div className="profile-modal-overlay" onClick={() => setShowPromptModal(false)}>
+          <div className="profile-modal-content" onClick={(event) => event.stopPropagation()}>
+            <h3>Add Profile Prompt</h3>
+            <select
+              className="profile-modal-input profile-modal-select"
+              id="prompt-question"
+              defaultValue=""
+            >
+              <option value="" disabled>Choose a question...</option>
+              <option value="My go-to spot">My go-to spot</option>
+              <option value="Best date idea">Best date idea</option>
+              <option value="Two truths and a lie">Two truths and a lie</option>
+              <option value="I'm weirdly good at">I'm weirdly good at</option>
+              <option value="My ideal night out">My ideal night out</option>
+              <option value="Biggest turn-on">Biggest turn-on</option>
+              <option value="Biggest turn-off">Biggest turn-off</option>
+              <option value="The way to my heart">The way to my heart</option>
+              <option value="My simple pleasures">My simple pleasures</option>
+              <option value="I'm looking for">I'm looking for</option>
+              <option value="My friends describe me as">My friends describe me as</option>
+              <option value="I want someone who">I want someone who</option>
+            </select>
+            <input
+              className="profile-modal-input"
+              id="prompt-answer"
+              placeholder="Your answer..."
+            />
+            <div className="profile-modal-actions">
+              <button className="profile-modal-btn cancel" onClick={() => setShowPromptModal(false)}>Cancel</button>
+              <button className="profile-modal-btn save" onClick={() => {
+                const q = (document.getElementById('prompt-question') as HTMLSelectElement)?.value;
+                const a = (document.getElementById('prompt-answer') as HTMLInputElement)?.value?.trim();
+                if (!q || !a) { showToast('Select a question and write an answer.', 'info'); return; }
+                setPrompts([...prompts, { question: q, answer: a }]);
+                setShowPromptModal(false);
+              }}>Add</button>
             </div>
           </div>
         </div>

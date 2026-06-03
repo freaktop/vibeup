@@ -5,11 +5,13 @@ import { storage } from './utils/storage';
 import { useAuth } from './contexts/AuthContext';
 import { getCurrentUid, isDemoMode } from './auth';
 import { listenNotifications, getProfile } from './firestore';
+import { initializeNotifications } from './utils/notifications';
 import './App.css';
 
 const Discover = lazy(() => import('./screens/Discover'));
 const VibeUp = lazy(() => import('./screens/VibeUp'));
 const Messages = lazy(() => import('./screens/Messages'));
+const Venues = lazy(() => import('./screens/Venues'));
 const Map = lazy(() => import('./screens/Map'));
 const Profile = lazy(() => import('./screens/Profile'));
 const WallFeed = lazy(() => import('./screens/WallFeed'));
@@ -26,7 +28,7 @@ const Login = lazy(() => import('./screens/Login'));
 const SignUp = lazy(() => import('./screens/SignUp'));
 const Onboarding = lazy(() => import('./screens/Onboarding'));
 
-type Tab = 'grid' | 'vibeup' | 'map' | 'wall' | 'events' | 'outtonight' | 'messages' | 'profile' | 'notifications' | 'settings' | 'whoviewed' | 'communities';
+type Tab = 'grid' | 'vibeup' | 'map' | 'wall' | 'events' | 'outtonight' | 'venues' | 'messages' | 'profile' | 'notifications' | 'settings' | 'whoviewed' | 'communities';
 type View = 'main' | 'chat' | 'onboarding' | 'settings' | 'whoviewed' | 'communities' | 'login' | 'signup' | 'admin';
 
 function App() {
@@ -43,6 +45,10 @@ function App() {
       setMinSplashDone(true);
     }, 900);
     return () => clearTimeout(splashTimer);
+  }, []);
+
+  useEffect(() => {
+    initializeNotifications();
   }, []);
 
   useEffect(() => {
@@ -326,6 +332,7 @@ function App() {
           {activeTab === 'wall' && 'Wall'}
           {activeTab === 'events' && 'Events'}
           {activeTab === 'outtonight' && 'Out Tonight'}
+          {activeTab === 'venues' && 'Venues'}
           {activeTab === 'messages' && 'Messages'}
           {activeTab === 'profile' && 'Profile'}
           {activeTab === 'notifications' && 'Notifications'}
@@ -351,6 +358,7 @@ function App() {
           {activeTab === 'wall' && <WallFeed />}
           {activeTab === 'events' && <Events />}
           {activeTab === 'outtonight' && <RightNow />}
+          {activeTab === 'venues' && <Venues />}
           {activeTab === 'messages' && <Messages onOpenChat={openChat} onOpenGroupChat={openGroupChat} />}
           {activeTab === 'profile' && <Profile />}
           {activeTab === 'notifications' && <Notifications />}
@@ -399,6 +407,13 @@ function App() {
         >
           <span className="tab-icon">🌙</span>
           <span className="tab-label">Out Tonight</span>
+        </button>
+        <button
+          className={`tab ${activeTab === 'venues' ? 'active' : ''}`}
+          onClick={() => setActiveTab('venues')}
+        >
+          <span className="tab-icon">📍</span>
+          <span className="tab-label">Venues</span>
         </button>
         <button
           className={`tab ${activeTab === 'messages' ? 'active' : ''}`}

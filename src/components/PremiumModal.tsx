@@ -20,8 +20,10 @@ const PAYWALL_FEATURES = [
 ];
 
 const PRICING_PLANS = [
-  { name: 'Premium Monthly', price: '$9.99', period: '/month', popular: false },
-  { name: 'Premium Annual', price: '$59.99', period: '/year', popular: true, savings: 'Save 50%' },
+  { name: 'Premium Monthly', price: '$9.99', period: '/month', popular: false, tier: 'premium' },
+  { name: 'Premium Annual', price: '$59.99', period: '/year', popular: true, savings: 'Save 50%', tier: 'premium' },
+  { name: 'Premier Monthly', price: '$19.99', period: '/month', popular: false, tier: 'premier' },
+  { name: 'Elite Monthly', price: '$39.99', period: '/month', popular: false, tier: 'elite' },
 ];
 
 const ADD_ON_PRICES = [
@@ -107,6 +109,15 @@ export default function PremiumModal({ isOpen, onClose, onPurchase, feature }: P
                     <div className="plan-name">{plan.name}</div>
                     <div className="plan-price">{plan.price}<span className="plan-period">{plan.period}</span></div>
                     {plan.savings && <div className="plan-savings">{plan.savings}</div>}
+                    <button
+                      className="plan-select-btn"
+                      onClick={() => {
+                        onPurchase(plan.tier);
+                        onClose();
+                      }}
+                    >
+                      Select
+                    </button>
                   </div>
                 ))}
               </div>

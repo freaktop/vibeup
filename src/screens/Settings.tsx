@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { signOut } from 'firebase/auth';
+import { signOut, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from 'firebase/auth';
 import { storage } from '../utils/storage';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
@@ -28,6 +28,14 @@ export default function Settings() {
   const [reportProblemText, setReportProblemText] = useState('');
   const [reportCount, setReportCount] = useState(0);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [isSendingVerification, setIsSendingVerification] = useState(false);
+  const [showSwipeHistory, setShowSwipeHistory] = useState(false);
 
   useEffect(() => {
     const profile = storage.getUserProfile();
@@ -50,6 +58,7 @@ export default function Settings() {
         }
         setProfileNameById(next);
       });
+      setEmailVerified(false);
       const unsubReports = listenReports((reports) => {
         setReportCount(reports.filter((report) => report.status === 'open').length);
       });
@@ -78,6 +87,7 @@ export default function Settings() {
         }
         setProfileNameById(next);
       });
+      setEmailVerified(!!user.emailVerified);
     });
 
     const unsubReports = listenReports((reports) => {
@@ -129,6 +139,59 @@ export default function Settings() {
       showToast(`${label} has been unblocked.`, 'success');
     } catch {
       showToast('Could not unblock. Try again.', 'error');
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (!currentPassword) {
+      showToast('Please enter your current password.', 'info');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      showToast('New password must be at least 6 characters.', 'info');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('Passwords do not match.', 'error');
+      return;
+    }
+    if (!auth?.currentUser?.email) {
+      showToast('No email account linked. Sign in with email first.', 'error');
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, newPassword);
+      showToast('Password changed successfully!', 'success');
+      setShowPasswordModal(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      if (err.code === 'auth/wrong-password') {
+        showToast('Current password is incorrect.', 'error');
+      } else if (err.code === 'auth/weak-password') {
+        showToast('New password is too weak. Use at least 6 characters.', 'error');
+      } else {
+        showToast('Failed to change password. Try again.', 'error');
+      }
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleSendVerification = async () => {
+    if (!auth?.currentUser) return;
+    setIsSendingVerification(true);
+    try {
+      await sendEmailVerification(auth.currentUser);
+      showToast('Verification email sent! Check your inbox.', 'success');
+    } catch {
+      showToast('Could not send verification email. Try again.', 'error');
+    } finally {
+      setIsSendingVerification(false);
     }
   };
 
@@ -348,6 +411,38 @@ export default function Settings() {
 
       <div className="settings-section">
         <h2 className="settings-section-title">Account</h2>
+        {auth?.currentUser?.email && (
+          <div className="settings-item" style={{ padding: '12px 16px', borderBottom: '1px solid #2a2a2a' }}>
+            <div className="settings-item-content">
+              <span className="settings-item-label">Email Verification</span>
+              <span className="settings-item-desc">
+                {auth.currentUser.email} — {emailVerified ? '✅ Verified' : '❌ Not verified'}
+              </span>
+            </div>
+            {!emailVerified && (
+              <button
+                className="modal-btn primary"
+                onClick={handleSendVerification}
+                disabled={isSendingVerification}
+                style={{ fontSize: 12, padding: '6px 12px' }}
+              >
+                {isSendingVerification ? 'Sending...' : 'Resend'}
+              </button>
+            )}
+          </div>
+        )}
+        {auth?.currentUser?.email && (
+          <button className="settings-button" onClick={() => setShowPasswordModal(true)}>
+            <span>🔑</span>
+            <span>Change Password</span>
+            <span>→</span>
+          </button>
+        )}
+        <button className="settings-button" onClick={() => setShowSwipeHistory(true)}>
+          <span>🔄</span>
+          <span>Swipe History</span>
+          <span>→</span>
+        </button>
         <button 
           className="settings-button settings-button-danger" 
           onClick={() => setShowLogoutConfirm(true)}
@@ -365,6 +460,70 @@ export default function Settings() {
           <span>→</span>
         </button>
       </div>
+
+      {showSwipeHistory && (
+        <div className="modal-overlay" onClick={() => setShowSwipeHistory(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Swipe History</h3>
+            {(() => {
+              const history = storage.getSwipeHistory();
+              if (history.length === 0) {
+                return <p style={{ color: '#999', textAlign: 'center', padding: '20px 0' }}>No swipe history yet.</p>;
+              }
+              return (
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {[...history].reverse().map((entry, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #2a2a2a' }}>
+                      <span>{entry.profileName || 'User'}</span>
+                      <span style={{ color: entry.type === 'like' || entry.type === 'superlike' ? '#ff2d95' : entry.type === 'pass' ? '#999' : '#666' }}>
+                        {entry.type === 'superlike' ? '⭐ Super Like' : entry.type === 'like' ? '❤️ Like' : entry.type === 'pass' ? '✕ Pass' : entry.type}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            <div className="modal-actions">
+              <button className="modal-btn cancel" onClick={() => setShowSwipeHistory(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={() => setShowPasswordModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Change Password</h3>
+            <input
+              type="password"
+              className="modal-input"
+              placeholder="Current password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+            <input
+              type="password"
+              className="modal-input"
+              placeholder="New password (min 6 characters)"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <input
+              type="password"
+              className="modal-input"
+              placeholder="Confirm new password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+            <div className="modal-actions">
+              <button className="modal-btn cancel" onClick={() => setShowPasswordModal(false)}>Cancel</button>
+              <button className="modal-btn primary" onClick={handlePasswordChange} disabled={isChangingPassword}>
+                {isChangingPassword ? 'Changing...' : 'Change Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>

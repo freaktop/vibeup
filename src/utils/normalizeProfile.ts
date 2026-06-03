@@ -52,5 +52,12 @@ export function normalizeProfile(p: Partial<Profile> | null | undefined): Profil
     goingOutTonight: !!p.goingOutTonight,
     visibleOnMap: !!p.visibleOnMap,
     ghostMode: !!p.ghostMode,
+    tribe: p.tribe,
+    relationshipStatus: p.relationshipStatus,
+    hivStatus: p.hivStatus,
+    video: p.video,
+    albums: p.albums ? p.albums.map(a => ({ name: a.name, photos: [...a.photos] })) : undefined,
+    prompts: p.prompts ? p.prompts.map(pr => ({ question: pr.question, answer: pr.answer })) : undefined,
+    boostExpiresAt: p.boostExpiresAt,
   };
 }

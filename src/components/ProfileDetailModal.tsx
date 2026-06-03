@@ -92,6 +92,18 @@ export default function ProfileDetailModal({
             </div>
           )}
 
+          {Array.isArray((profile as any).prompts) && (profile as any).prompts.length > 0 && (
+            <div className="profile-detail-section">
+              <h3>Prompts</h3>
+              {(profile as any).prompts.map((p: { question: string; answer: string }, i: number) => (
+                <div key={i} className="profile-detail-prompt">
+                  <div className="profile-detail-prompt-question">{p.question}</div>
+                  <div className="profile-detail-prompt-answer">"{p.answer}"</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {profile.sexualOrientation && (
             <div className="profile-detail-section">
               <h3>Orientation</h3>

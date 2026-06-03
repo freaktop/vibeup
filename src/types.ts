@@ -3,6 +3,9 @@ export type VibeType = 'Party' | 'Chill' | 'Romantic' | 'Wild' | 'Travel';
 export type TonightLookingFor = 'Hookup' | 'Date' | 'Going Out' | 'Friends' | 'Clubbing';
 export type BodyType = 'Slim' | 'Athletic' | 'Average' | 'Muscular' | 'Bear' | 'Dad bod' | 'Prefer not to say';
 export type Role = 'Top' | 'Bottom' | 'Versatile' | 'Side' | 'Prefer not to say';
+export type Tribe = 'Bear' | 'Otter' | 'Jock' | 'Twink' | 'Daddy' | 'Trans' | 'Leather' | 'Punk' | 'Geek' | 'Gym' | 'Muscle' | 'Chub' | 'Skinny' | 'Drag' | 'Queer' | 'Bi';
+export type RelationshipStatus = 'Single' | 'Dating' | 'Open relationship' | 'Married' | 'Polyamorous' | 'Prefer not to say';
+export type HivStatus = 'Negative' | 'Positive' | 'Undetectable' | 'On PrEP' | 'Prefer not to say';
 
 export interface Profile {
   id: string;
@@ -40,6 +43,13 @@ export interface Profile {
   goingOutTonight?: boolean;
   visibleOnMap?: boolean;
   ghostMode?: boolean;
+  tribe?: Tribe;
+  relationshipStatus?: RelationshipStatus;
+  hivStatus?: HivStatus;
+  video?: string;
+  albums?: { name: string; photos: string[] }[];
+  boostExpiresAt?: number;
+  prompts?: { question: string; answer: string }[];
 }
 
 export interface Match {
@@ -64,12 +74,13 @@ export interface ChatMessage {
   id: string;
   text?: string;
   imageUrl?: string;
+  gifUrl?: string;
   voiceNoteUrl?: string;
   senderId: string;
   timestamp: number;
   isRead: boolean;
-  reactions?: { [key: string]: string[] }; // emoji -> user IDs
-  messageType: 'text' | 'image' | 'voice';
+  reactions?: { [key: string]: string[] };
+  messageType: 'text' | 'image' | 'voice' | 'gif';
 }
 
 export interface LinkUpRequest {
@@ -216,6 +227,13 @@ export interface UserProfile {
   goingOutTonight?: boolean;
   visibleOnMap?: boolean;
   ghostMode?: boolean;
+  tribe?: Tribe;
+  relationshipStatus?: RelationshipStatus;
+  hivStatus?: HivStatus;
+  video?: string;
+  albums?: { name: string; photos: string[] }[];
+  boostExpiresAt?: number;
+  prompts?: { question: string; answer: string }[];
   currentCity?: string;
   isProfileHidden?: boolean;
   nsfwEnabled?: boolean;
@@ -235,6 +253,8 @@ export interface PremiumFeatures {
   hasSuperLike: boolean;
   hasUndo: boolean;
   hasPremium: boolean;
+  hasPremier?: boolean;
+  hasElite?: boolean;
   boostsRemaining: number;
   superLikesRemaining: number;
   undosRemaining: number;

@@ -17,7 +17,7 @@ import { Profile } from '../types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getCurrentUid } from '../auth';
-import { createReport, listenMySwipes, listenProfiles, recordProfileView, removeSwipe, setSwipe } from '../firestore';
+import { createReport, listenMySwipes, listenProfiles, listenProfilesRaw, recordProfileView, removeSwipe, setSwipe } from '../firestore';
 import './Map.css';
 
 export default function Map() {
@@ -123,7 +123,8 @@ export default function Map() {
       }
 
       setIsLoading(true);
-      unsubProfiles = listenProfiles((profileRows) => {
+      // Include ALL profiles (including current user) so map is usable when testing alone
+      unsubProfiles = listenProfilesRaw((profileRows) => {
         const enriched = profileRows.map((p) => {
           const currentCity = (p as any).currentCity as string | undefined;
           const lat = p.lat ?? getCityCoords(currentCity)?.lat;
@@ -401,25 +402,13 @@ export default function Map() {
           type="warning"
         />
       )}
-      <div className="map-header-controls">
+      <div className="map-headers-row">
         <button
           className="map-nearme-btn"
           onClick={handleNearMe}
           title="Center map on your location"
         >
-          📍 Near Me
-        </button>
-        <button
-          className={`map-explore-btn ${exploreMode ? 'active' : ''}`}
-          onClick={() => {
-            setExploreMode(true);
-            setSneakyLinks(false);
-            setWhosOutTonight(false);
-            showToast('Explore mode: View all profiles in this area', 'info');
-          }}
-          title="Explore - View all profiles in this area"
-        >
-          🔍 Explore {exploreMode && `(${profilesToShow.length})`}
+          📍 Me
         </button>
         <button
           className={`map-cruise-btn ${!exploreMode && !sneakyLinks && !whosOutTonight ? 'active' : ''}`}
@@ -427,11 +416,10 @@ export default function Map() {
             setExploreMode(false);
             setSneakyLinks(false);
             setWhosOutTonight(false);
-            showToast('Cruise mode: Browse all profiles', 'info');
           }}
-          title="Cruise - Browse all profiles"
+          title="All profiles"
         >
-          🚗 Cruise {!exploreMode && !sneakyLinks && !whosOutTonight && `(${profilesToShow.length})`}
+          All
         </button>
         <button
           className={`map-sneaky-btn ${sneakyLinks ? 'active' : ''}`}
@@ -439,11 +427,10 @@ export default function Map() {
             setSneakyLinks(true);
             setExploreMode(false);
             setWhosOutTonight(false);
-            showToast('Sneaky Links: Showing hookup-ready profiles only 🔥', 'success');
           }}
-          title="Sneaky Links - Show hookup spots only"
+          title="Hookup-ready profiles"
         >
-          🔥 Sneaky Links {sneakyLinks && `(${profilesToShow.length})`}
+          🔥 Now
         </button>
         <button
           className={`map-whosout-btn ${whosOutTonight ? 'active' : ''}`}
@@ -451,21 +438,18 @@ export default function Map() {
             setWhosOutTonight(!whosOutTonight);
             if (whosOutTonight) {
               setSneakyLinks(false);
-              showToast('Showing all profiles', 'info');
-            } else {
-              showToast('Who\'s Out: Showing profiles available tonight 🌙', 'success');
             }
           }}
-          title="Who's Out Tonight - Show profiles going out"
+          title="Profiles going out tonight"
         >
-          🌙 Who's Out {whosOutTonight && `(${profilesToShow.length})`}
+          🌙 Out
         </button>
         <button
           className="map-search-btn"
           onClick={() => setShowSearchModal(true)}
           title="Navigate to city"
         >
-          🌎 Navigate
+          🌎
         </button>
       </div>
 

@@ -54,7 +54,7 @@ export async function upsertMyProfile(userProfile: UserProfile | null | undefine
 
   const currentUser = getCurrentUser();
   const displayName = currentUser?.displayName || userProfile?.name || 'New User';
-  const photo = currentUser?.photoURL || userProfile?.photos?.[0] || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop';
+  const photo = currentUser?.photoURL || userProfile?.photos?.[0] || `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile?.name || 'User')}&background=ff2d95&color=fff&size=400&rounded=true&bold=true`;
 
   const age = (() => {
     const n = Number.parseInt(userProfile?.age || '', 10);
@@ -62,6 +62,31 @@ export async function upsertMyProfile(userProfile: UserProfile | null | undefine
   })();
 
   const tags = userProfile?.interests || [];
+
+  // Resolve lat/lng from currentCity
+  let lat: number | undefined;
+  let lng: number | undefined;
+  if (userProfile?.currentCity && userProfile.currentCity !== 'Near Me') {
+    const { getCityCoords } = await import('./utils/geolocation');
+    const coords = getCityCoords(userProfile.currentCity);
+    if (coords) {
+      lat = coords.lat;
+      lng = coords.lng;
+    }
+  }
+  // Try browser geolocation for precise coords
+  if (!lat || !lng) {
+    try {
+      const { getCurrentLocation } = await import('./utils/geolocation');
+      const loc = await getCurrentLocation();
+      if (loc) {
+        lat = loc.latitude;
+        lng = loc.longitude;
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
 
   await setDoc(
     doc(requireDb(), 'profiles', uid),
@@ -72,6 +97,8 @@ export async function upsertMyProfile(userProfile: UserProfile | null | undefine
       photo,
       photos: userProfile?.photos || (currentUser?.photoURL ? [currentUser.photoURL] : []),
       tags,
+      lat: lat ?? null,
+      lng: lng ?? null,
       bio: userProfile?.bio || '',
       sexualOrientation: userProfile?.sexualOrientation || null,
       lookingFor: userProfile?.lookingFor || [],
@@ -153,7 +180,7 @@ export async function seedMockProfilesIfEmpty(): Promise<{ seeded: boolean; coun
 
 export function listenProfiles(onChange: (profiles: Profile[]) => void): Unsubscribe {
   if (isDemoMode() || !db) {
-    const mock = mockProfiles.map((p) => ({ ...p, id: p.id })) as Profile[];
+    const mock = mockProfiles.map((p) => ({ ...p, id: p.id, online: true })) as Profile[];
     onChange(mock);
     return () => {};
   }
@@ -166,9 +193,19 @@ export function listenProfiles(onChange: (profiles: Profile[]) => void): Unsubsc
         const profiles = snap.docs
           .map((d) => {
             const data = d.data() as Omit<Profile, 'id'>;
-            return { id: d.id, ...data };
+            const lastActive = data.lastActive
+              ? (typeof data.lastActive === 'object' && 'toMillis' in data.lastActive
+                ? (data.lastActive as any).toMillis()
+                : data.lastActive as number)
+              : 0;
+            return {
+              id: d.id,
+              ...data,
+              online: lastActive > Date.now() - 300000,
+            };
           })
-          .filter((p) => (uid ? p.id !== uid : true));
+          .filter((p) => (uid ? p.id !== uid : true))
+          .filter((p) => !p.ghostMode);
         
         if (profiles.length === 0) {
           console.warn('[Discover] No profiles returned from Firestore query (0 docs present)');
@@ -181,7 +218,44 @@ export function listenProfiles(onChange: (profiles: Profile[]) => void): Unsubsc
     },
     (err) => {
       console.error('[Discover] Firebase listen error:', err?.code, err?.message);
-      // caller can still show an empty state; this prevents silent hangs
+      onChange([]);
+    },
+  );
+}
+
+/** Same as listenProfiles but includes the current user's profile (for map) */
+export function listenProfilesRaw(onChange: (profiles: Profile[]) => void): Unsubscribe {
+  if (isDemoMode() || !db) {
+    const mock = mockProfiles.map((p) => ({ ...p, id: p.id, online: true })) as Profile[];
+    onChange(mock);
+    return () => {};
+  }
+  const q = query(collection(requireDb(), 'profiles'), limit(200));
+  return onSnapshot(
+    q,
+    (snap) => {
+      try {
+        const profiles = snap.docs.map((d) => {
+          const data = d.data() as Omit<Profile, 'id'>;
+          const lastActive = data.lastActive
+            ? (typeof data.lastActive === 'object' && 'toMillis' in data.lastActive
+              ? (data.lastActive as any).toMillis()
+              : data.lastActive as number)
+            : 0;
+          return {
+            id: d.id,
+            ...data,
+            online: lastActive > Date.now() - 300000,
+          };
+        });
+        onChange(profiles);
+      } catch (err) {
+        console.error('[Map] Error processing profiles snapshot:', err);
+        onChange([]);
+      }
+    },
+    (err) => {
+      console.error('[Map] Firebase listen error:', err?.code, err?.message);
       onChange([]);
     },
   );
@@ -525,7 +599,7 @@ export async function ensureMatchIfMutual(uid: string, targetId: string): Promis
 
 export function listenMatches(
   uid: string,
-  onChange: (matches: { id: string; users: string[]; lastMessage: string | null; lastMessageAt: number | null }[]) => void,
+  onChange: (matches: { id: string; users: string[]; lastMessage: string | null; lastMessageAt: number | null; typingBy: string | null }[]) => void,
 ): Unsubscribe {
   if (!db) {
     onChange([]);
@@ -544,6 +618,7 @@ export function listenMatches(
             users: (data?.users as string[]) || [],
             lastMessage: (data?.lastMessage as string | null) ?? null,
             lastMessageAt,
+            typingBy: (data?.typingBy as string | null) ?? null,
           };
         }),
       );
@@ -602,6 +677,7 @@ export function listenChatMessages(matchId: string, onChange: (messages: ChatMes
           id: d.id,
           text: data.text,
           imageUrl: data.imageUrl,
+          gifUrl: data.gifUrl,
           voiceNoteUrl: data.voiceNoteUrl,
           senderId: data.senderId,
           timestamp: data.timestamp?.toMillis ? data.timestamp.toMillis() : Date.now(),
@@ -623,17 +699,19 @@ export async function sendChatMessage(params: {
   senderId: string;
   text?: string;
   imageUrl?: string;
+  gifUrl?: string;
   voiceNoteUrl?: string;
-  messageType: 'text' | 'image' | 'voice';
+  messageType: 'text' | 'image' | 'voice' | 'gif';
 }): Promise<void> {
-  const { matchId, senderId, text, imageUrl, voiceNoteUrl, messageType } = params;
+  const { matchId, senderId, text, imageUrl, gifUrl, voiceNoteUrl, messageType } = params;
 
-  if (!db) {
+  if (!db || isDemoMode()) {
     const messages = storage.getChatMessages(matchId);
     messages.push({
       id: `local_${Date.now()}`,
       text: text ?? '',
       imageUrl: imageUrl ?? null,
+      gifUrl: gifUrl ?? null,
       voiceNoteUrl: voiceNoteUrl ?? null,
       senderId,
       timestamp: Date.now(),
@@ -655,6 +733,7 @@ export async function sendChatMessage(params: {
     senderId,
     text: text ?? null,
     imageUrl: imageUrl ?? null,
+    gifUrl: gifUrl ?? null,
     voiceNoteUrl: voiceNoteUrl ?? null,
     messageType,
     isRead: false,
@@ -662,7 +741,7 @@ export async function sendChatMessage(params: {
     timestamp: serverTimestamp(),
   });
 
-  const preview = text ?? (messageType === 'image' ? '📷 Photo' : messageType === 'voice' ? '🎤 Voice note' : '');
+  const preview = text ?? (messageType === 'image' ? '📷 Photo' : messageType === 'gif' ? '🎞️ GIF' : messageType === 'voice' ? '🎤 Voice note' : '');
   await updateDoc(matchRef, {
     lastMessage: preview,
     lastMessageAt: serverTimestamp(),
@@ -679,6 +758,53 @@ export async function sendChatMessage(params: {
       profileId: senderId,
       actionUrl: `match:${matchId}`,
     }).catch(() => {});
+  }
+}
+
+export async function toggleMessageReaction(
+  matchId: string,
+  messageId: string,
+  userId: string,
+  emoji: string,
+): Promise<void> {
+  if (!db || isDemoMode()) return;
+  const msgRef = doc(requireDb(), 'matches', matchId, 'messages', messageId);
+  const snap = await getDoc(msgRef);
+  if (!snap.exists()) return;
+  const data = snap.data() as any;
+  const reactions = data.reactions || {};
+  if (!reactions[emoji]) reactions[emoji] = [];
+  if (reactions[emoji].includes(userId)) {
+    reactions[emoji] = reactions[emoji].filter((id: string) => id !== userId);
+    if (reactions[emoji].length === 0) delete reactions[emoji];
+  } else {
+    reactions[emoji].push(userId);
+  }
+  await updateDoc(msgRef, { reactions });
+}
+
+export async function updateTypingStatus(matchId: string, userId: string, isTyping: boolean): Promise<void> {
+  if (!db || isDemoMode()) return;
+  const matchRef = doc(requireDb(), 'matches', matchId);
+  await updateDoc(matchRef, {
+    typingBy: isTyping ? userId : null,
+  });
+}
+
+export async function markMessagesAsRead(matchId: string, currentUserId: string): Promise<void> {
+  if (!db || isDemoMode()) return;
+  const q = query(
+    collection(requireDb(), 'matches', matchId, 'messages'),
+    where('senderId', '!=', currentUserId),
+    where('isRead', '==', false),
+  );
+  const snap = await getDocs(q);
+  const batch = writeBatch(requireDb());
+  snap.docs.forEach(d => {
+    batch.update(d.ref, { isRead: true });
+  });
+  if (snap.docs.length > 0) {
+    await batch.commit();
   }
 }
 
@@ -753,7 +879,7 @@ export async function createWallPost(input: {
       profile?.photo ||
       profile?.photos?.[0] ||
       currentUser?.photoURL ||
-      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.name || currentUser?.displayName || 'User')}&background=ff2d95&color=fff&size=200&rounded=true&bold=true`,
     content: input.content,
     image: input.image || null,
     video: input.video || null,
@@ -1508,4 +1634,9 @@ export function listenProfileViewers(
     },
     () => onChange([]),
   );
+}
+
+export async function verifyProfile(profileId: string, verified: boolean): Promise<void> {
+  if (!db || isDemoMode()) return;
+  await updateDoc(doc(requireDb(), 'users', profileId), { verified });
 }

@@ -99,10 +99,19 @@ export default function Events() {
 
   const handleRSVP = (eventId: string, status: 'going' | 'interested' | 'notGoing') => {
     try {
-      setEvents(events.map(event => {
-        if (event.id !== eventId) return event;
+      const event = events.find(e => e.id === eventId);
+      if (!event) return;
+
+      // Enforce maxAttendees for 'going' RSVP
+      if (status === 'going' && event.maxAttendees && event.rsvps.going.length >= event.maxAttendees) {
+        showToast('This event is full. Join the waitlist or mark as interested.', 'info');
+        return;
+      }
+
+      setEvents(events.map(e => {
+        if (e.id !== eventId) return e;
         
-        const newRSVPs = { ...event.rsvps };
+        const newRSVPs = { ...e.rsvps };
         // Remove from all lists
         newRSVPs.going = newRSVPs.going.filter(id => id !== userId);
         newRSVPs.interested = newRSVPs.interested.filter(id => id !== userId);
@@ -113,7 +122,7 @@ export default function Events() {
           newRSVPs[status].push(userId);
         }
         
-        return { ...event, rsvps: newRSVPs };
+        return { ...e, rsvps: newRSVPs };
       }));
 
       setEventRsvp(eventId, userId, status).catch(() => {
@@ -237,8 +246,14 @@ export default function Events() {
               </div>
               <div className="detail-item">
                 <span className="detail-icon">👥</span>
-                <span>{totalRSVPs} attending</span>
+                <span>{totalRSVPs} attending{event.maxAttendees ? ` / ${event.maxAttendees}` : ''}</span>
               </div>
+              {event.maxAttendees && event.rsvps.going.length >= event.maxAttendees && (
+                <div className="detail-item">
+                  <span className="detail-icon">🚫</span>
+                  <span style={{ color: '#ff6b6b' }}>Event is full</span>
+                </div>
+              )}
             </div>
             <div className="detail-tags">
               {event.tags.map((tag, index) => (
@@ -505,7 +520,7 @@ export default function Events() {
                   </div>
                   <div className="event-detail-item">
                     <span className="detail-icon">👥</span>
-                    <span>{totalRSVPs} attending</span>
+                    <span>{totalRSVPs} attending{event.maxAttendees ? ` / ${event.maxAttendees}` : ''}</span>
                   </div>
                 </div>
 
@@ -707,6 +722,7 @@ function CreateEventModal({
   const [isPublic, setIsPublic] = useState(true);
   const [nsfw, setNsfw] = useState(false);
   const [tags, setTags] = useState('');
+  const [maxAttendees, setMaxAttendees] = useState('');
 
   const handleCreate = () => {
     if (!title.trim() || !description.trim() || !location.trim() || !date) {
@@ -741,11 +757,12 @@ function CreateEventModal({
           interested: [],
           notGoing: [],
         },
-      tags: tags
+        tags: tags
         .split(',')
         .map(tag => tag.trim())
         .filter(Boolean),
         nsfw,
+        maxAttendees: maxAttendees ? parseInt(maxAttendees, 10) : undefined,
       };
       
       if (onEventCreated) {
@@ -805,6 +822,14 @@ function CreateEventModal({
           value={date}
           onChange={(e) => setDate(e.target.value)}
           className="modal-input"
+        />
+        <input
+          type="number"
+          placeholder="Max attendees (optional)"
+          value={maxAttendees}
+          onChange={(e) => setMaxAttendees(e.target.value)}
+          className="modal-input"
+          min={1}
         />
         <input
           type="text"

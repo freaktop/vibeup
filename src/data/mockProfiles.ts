@@ -6,6 +6,9 @@ const pronounOptions = ['He/Him', 'He/Him', 'They/Them', 'He/Him', 'He/Him', 'Th
 const genderOptions = ['Man', 'Man', 'Non-binary', 'Man', 'Man', 'Non-binary'];
 const bodyTypeOptions: BodyType[] = ['Athletic', 'Slim', 'Average', 'Muscular', 'Bear', 'Athletic'];
 const roleOptions: Role[] = ['Top', 'Bottom', 'Versatile', 'Top', 'Bottom', 'Versatile'];
+const tribeOptions = ['Jock', 'Bear', 'Twink', 'Geek', 'Gym', 'Leather', 'Daddy', 'Otter', 'Chub', 'Skinny', 'Queer', 'Bi'];
+const relationshipOptions = ['Single', 'Single', 'Dating', 'Open relationship', 'Single', 'Polyamorous', 'Single', 'Single', 'Dating', 'Single'];
+const hivOptions = ['Negative', 'On PrEP', 'Undetectable', 'Negative', 'On PrEP', 'Negative', 'Prefer not to say', 'Negative', 'Undetectable', 'On PrEP', 'Negative', 'Positive', 'Negative', 'On PrEP', 'Negative'];
 const heightOptions = ["5'10\"", "6'0\"", "5'8\"", "6'2\"", "5'11\"", "5'9\"", "6'1\"", "5'7\"", "6'3\"", "5'10\"", "5'6\"", "6'0\"", "5'8\"", "6'1\"", "5'9\""];
 
 const baseProfiles: Profile[] = [
@@ -324,8 +327,17 @@ const baseProfiles: Profile[] = [
   },
 ];
 
+const colors = ['ff2d95', '7c3aed', '3b82f6', '22c55e', 'f59e0b', 'ef4444', '06b6d4', '8b5cf6', 'ec4899', '14b8a6'];
+
+function avatarUrl(name: string, size = 400): string {
+  const bg = colors[name.charCodeAt(0) % colors.length];
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=${bg}&color=fff&size=${size}&rounded=true&bold=true`;
+}
+
 export const mockProfiles: Profile[] = baseProfiles.map((profile, index) => ({
   ...profile,
+  photo: avatarUrl(profile.name),
+  photos: [avatarUrl(profile.name), avatarUrl(profile.name, 400), avatarUrl(profile.name, 400)],
   intent: profile.intent || intentOptions[index % intentOptions.length],
   vibeStyle: profile.vibeStyle || vibeOptions[index % vibeOptions.length],
   verified: profile.verified ?? index % 4 === 0,
@@ -335,4 +347,7 @@ export const mockProfiles: Profile[] = baseProfiles.map((profile, index) => ({
   role: profile.role || roleOptions[index % roleOptions.length],
   height: profile.height || heightOptions[index % heightOptions.length],
   instagram: profile.instagram || `@${profile.name.toLowerCase()}${Math.floor(Math.random() * 100)}`,
+  tribe: (profile as any).tribe || tribeOptions[index % tribeOptions.length] as any,
+  relationshipStatus: (profile as any).relationshipStatus || relationshipOptions[index % relationshipOptions.length] as any,
+  hivStatus: (profile as any).hivStatus || hivOptions[index % hivOptions.length] as any,
 }));

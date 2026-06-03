@@ -481,3 +481,109 @@
   background: #FF6B9D;
   color: #fff;
 }
+
+.chat-gif-btn {
+  background: none;
+  border: 1px solid #555;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chat-gif-btn:hover {
+  background: #333;
+}
+
+.chat-message-gif {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  display: block;
+}
+
+.gif-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.gif-picker {
+  background: #1a1a1a;
+  border-radius: 16px 16px 0 0;
+  width: 100%;
+  max-width: 400px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.gif-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #333;
+}
+
+.gif-picker-search {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #222;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+.gif-picker-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.gif-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.gif-picker-item {
+  width: 100%;
+  aspect-ratio: 1;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.gif-picker-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gif-picker-loading {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 20px;
+  color: #999;
+}

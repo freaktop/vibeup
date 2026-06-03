@@ -25,6 +25,7 @@ export default function Messages({ onOpenChat, onOpenGroupChat }: MessagesProps)
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
   const [matchRows, setMatchRows] = useState<{ id: string; users: string[]; lastMessage: string | null; lastMessageAt: number | null }[]>([]);
   const [roomRows, setRoomRows] = useState<Room[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     let unsubProfiles: (() => void) | null = null;
@@ -189,34 +190,68 @@ export default function Messages({ onOpenChat, onOpenGroupChat }: MessagesProps)
         <button className="create-group-btn" onClick={() => setShowCreateGroup(true)}>
           ➕ Create Group Chat
         </button>
+        <input
+          type="text"
+          className="messages-search"
+          placeholder="Search messages..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #333',
+            background: '#1a1a1a', color: '#fff', fontSize: 14, marginTop: 8, boxSizing: 'border-box',
+          }}
+        />
       </div>
-      
-      {messages.length === 0 ? (
-        <div className="messages-empty">
-          <div className="empty-icon">💬</div>
-          <div className="empty-title">No messages yet</div>
-          <div className="empty-text">Start matching to begin conversations.</div>
-          <div className="empty-text" style={{ marginTop: '16px', fontSize: '14px', color: '#999' }}>
-            You can create group chats to connect with multiple people at once
-          </div>
-          <div className="messages-empty-actions">
-            <button
-              className="empty-cta"
-              onClick={() => window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'discover' } }))}
-            >
-              🧭 Go to Discover
-            </button>
-            <button
-              className="empty-cta secondary"
-              onClick={() => window.dispatchEvent(new CustomEvent('showCommunities'))}
-            >
-              👥 Browse Rooms
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          {messages.map((message) => (
+
+      {(() => {
+        const query = searchQuery.trim().toLowerCase();
+        const filtered = query
+          ? messages.filter(m =>
+              m.profileName.toLowerCase().includes(query) ||
+              (m.lastMessage && m.lastMessage.toLowerCase().includes(query))
+            )
+          : messages;
+
+        if (filtered.length === 0 && query) {
+          return (
+            <div className="messages-empty">
+              <div className="empty-icon">🔍</div>
+              <div className="empty-title">No results</div>
+              <div className="empty-text">No conversations match "{query}"</div>
+            </div>
+          );
+        }
+
+        if (messages.length === 0) {
+          return (
+            <div className="messages-empty">
+              <div className="empty-icon">💬</div>
+              <div className="empty-title">No messages yet</div>
+              <div className="empty-text">Start matching to begin conversations.</div>
+              <div className="empty-text" style={{ marginTop: '16px', fontSize: '14px', color: '#999' }}>
+                You can create group chats to connect with multiple people at once
+              </div>
+              <div className="messages-empty-actions">
+                <button
+                  className="empty-cta"
+                  onClick={() => window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'discover' } }))}
+                >
+                  🧭 Go to Discover
+                </button>
+                <button
+                  className="empty-cta secondary"
+                  onClick={() => window.dispatchEvent(new CustomEvent('showCommunities'))}
+                >
+                  👥 Browse Rooms
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <>
+          {filtered.map((message) => (
             <div
               key={message.id}
               className="message-item"
@@ -245,7 +280,8 @@ export default function Messages({ onOpenChat, onOpenGroupChat }: MessagesProps)
             </div>
           ))}
         </>
-      )}
+      );
+      })()}
       
       {showCreateGroup && (
         <CreateGroupModal 

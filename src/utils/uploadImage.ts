@@ -83,13 +83,49 @@ export async function uploadVoiceNote(blob: Blob, matchId: string): Promise<stri
   return getDownloadURL(storageRef);
 }
 
+export async function uploadProfileVideo(file: File): Promise<string> {
+  const uid = getCurrentUid();
+  if (isDemoMode() || !uid || !firebaseStorage) {
+    return readAsDataURL(file);
+  }
+
+  const ext = file.name.split('.').pop() || 'mp4';
+  const path = `profiles/${uid}/video_${Date.now()}.${ext}`;
+  const storageRef = ref(firebaseStorage, path);
+
+  await uploadBytes(storageRef, file, {
+    contentType: file.type || 'video/mp4',
+    customMetadata: { uploadedBy: uid },
+  });
+
+  return getDownloadURL(storageRef);
+}
+
+export async function uploadAlbumPhoto(file: File, albumName: string): Promise<string> {
+  const uid = getCurrentUid();
+  if (isDemoMode() || !uid || !firebaseStorage) {
+    return readAsDataURL(file);
+  }
+
+  const ext = file.name.split('.').pop() || 'jpg';
+  const path = `profiles/${uid}/albums/${albumName.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.${ext}`;
+  const storageRef = ref(firebaseStorage, path);
+
+  await uploadBytes(storageRef, file, {
+    contentType: file.type || 'image/jpeg',
+    customMetadata: { albumName, uploadedBy: uid },
+  });
+
+  return getDownloadURL(storageRef);
+}
+
 function readAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const img = new Image();
       img.onload = () => {
-        const maxDim = 1200;
+        const maxDim = 400;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           const ratio = Math.min(maxDim / width, maxDim / height);
@@ -102,7 +138,7 @@ function readAsDataURL(file: File): Promise<string> {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
         } else {
           resolve(reader.result as string);
         }

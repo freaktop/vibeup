@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, LinkUpRequest } from '../types';
 import SafeImage from '../components/SafeImage';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 import { getCurrentUid } from '../auth';
-import { getProfile, listenChatMessages, matchIdFor, sendChatMessage } from '../firestore';
+import { createReport, getProfile, listenChatMessages, markMessagesAsRead, matchIdFor, sendChatMessage, setSwipe, toggleMessageReaction, updateTypingStatus } from '../firestore';
+import ReportModal from '../components/ReportModal';
+import GifPicker from '../components/GifPicker';
 import { uploadChatImage, uploadVoiceNote } from '../utils/uploadImage';
 import { useToast } from '../hooks/useToast';
 import './Chat.css';
@@ -43,6 +46,10 @@ export default function Chat({ profileId }: ChatProps) {
   const [profile, setProfile] = useState<any>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (profileId) {
@@ -56,6 +63,7 @@ export default function Chat({ profileId }: ChatProps) {
 
   useEffect(() => {
     let unsubMessages: (() => void) | null = null;
+    let unsubTyping: (() => void) | null = null;
     let cancelled = false;
 
     // If Firebase auth is not available, use demo mode
@@ -80,6 +88,7 @@ export default function Chat({ profileId }: ChatProps) {
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       unsubMessages?.();
+      unsubTyping?.();
       if (!user || !profileId) {
         setMessages([]);
         setMatchId(null);
@@ -95,13 +104,31 @@ export default function Chat({ profileId }: ChatProps) {
 
       unsubMessages = listenChatMessages(mId, (msgs) => {
         setMessages(msgs);
+        // Auto-mark received messages as read
+        const uid = getCurrentUid();
+        if (uid && mId && db) {
+          markMessagesAsRead(mId, uid).catch(() => {});
+        }
       });
+
+      // Listen for typing status on the match document
+      if (db) {
+        const matchDocRef = doc(db, 'matches', mId);
+        unsubTyping = onSnapshot(matchDocRef, (snap) => {
+          if (!snap.exists()) return;
+          const data = snap.data() as any;
+          if (!cancelled) {
+            setIsTyping(data?.typingBy === profileId);
+          }
+        });
+      }
     });
 
     return () => {
       cancelled = true;
       unsubAuth();
       unsubMessages?.();
+      unsubTyping?.();
     };
   }, [profileId]);
 
@@ -109,7 +136,28 @@ export default function Chat({ profileId }: ChatProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const sendMessage = async (type: 'text' | 'image' | 'voice' = 'text', content?: string, fileUrl?: string) => {
+  const handleTyping = () => {
+    const uid = getCurrentUid();
+    const mId = matchId;
+    if (uid && mId && db) {
+      updateTypingStatus(mId, uid, true).catch(() => {});
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        updateTypingStatus(mId, uid, false).catch(() => {});
+      }, 2000);
+    }
+  };
+
+  const handleStopTyping = () => {
+    const uid = getCurrentUid();
+    const mId = matchId;
+    if (uid && mId && db) {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      updateTypingStatus(mId, uid, false).catch(() => {});
+    }
+  };
+
+  const sendMessage = async (type: 'text' | 'image' | 'voice' | 'gif' = 'text', content?: string, fileUrl?: string) => {
     const uid = getCurrentUid();
     if (!uid || !profileId || !matchId) return;
     if (type === 'text' && !inputText.trim()) return;
@@ -187,14 +235,16 @@ export default function Chat({ profileId }: ChatProps) {
   };
 
   const addReaction = (messageId: string, emoji: string) => {
+    const uid = getCurrentUid();
+    const mId = matchId;
     setMessages(messages.map(msg => {
       if (msg.id !== messageId) return msg;
       const reactions = { ...(msg.reactions || {}) };
       if (!reactions[emoji]) reactions[emoji] = [];
-      if (!reactions[emoji].includes('me')) {
-        reactions[emoji].push('me');
+      if (!reactions[emoji].includes(uid ?? 'me')) {
+        reactions[emoji].push(uid ?? 'me');
       } else {
-        reactions[emoji] = reactions[emoji].filter(id => id !== 'me');
+        reactions[emoji] = reactions[emoji].filter(id => id !== (uid ?? 'me'));
         if (reactions[emoji].length === 0) {
           delete reactions[emoji];
         }
@@ -202,6 +252,9 @@ export default function Chat({ profileId }: ChatProps) {
       return { ...msg, reactions };
     }));
     setShowReactions(null);
+    if (uid && mId) {
+      toggleMessageReaction(mId, messageId, uid, emoji).catch(() => {});
+    }
   };
 
   const handleCreateLinkUp = () => {
@@ -283,6 +336,46 @@ export default function Chat({ profileId }: ChatProps) {
         <button className="chat-linkup-btn" onClick={() => setShowLinkUpModal(true)}>
           🎉 Invite Out
         </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            className="chat-menu-btn"
+            onClick={() => setShowChatMenu(!showChatMenu)}
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}
+          >
+            ⋮
+          </button>
+          {showChatMenu && (
+            <div
+              style={{
+                position: 'absolute', top: '100%', right: 0, background: '#1a1a1a',
+                border: '1px solid #333', borderRadius: 8, zIndex: 100, minWidth: 140,
+              }}
+            >
+              <button
+                style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', color: '#fff', textAlign: 'left', cursor: 'pointer' }}
+                onClick={() => {
+                  setShowChatMenu(false);
+                  setShowReportModal(true);
+                }}
+              >
+                ⚠️ Report
+              </button>
+              <button
+                style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', cursor: 'pointer' }}
+                onClick={async () => {
+                  setShowChatMenu(false);
+                  const uid = getCurrentUid();
+                  if (uid && profileId) {
+                    await setSwipe(uid, profileId, 'block');
+                    showToast('User blocked.', 'success');
+                  }
+                }}
+              >
+                🚫 Block
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="chat-messages">
@@ -335,6 +428,9 @@ export default function Chat({ profileId }: ChatProps) {
             <div className="chat-message-bubble">
               {message.messageType === 'image' && message.imageUrl && (
                 <SafeImage src={message.imageUrl} alt="Shared" className="chat-message-image" />
+              )}
+              {message.messageType === 'gif' && message.gifUrl && (
+                <img src={message.gifUrl} alt="GIF" className="chat-message-gif" />
               )}
               {message.messageType === 'voice' && (
                 <div className="chat-voice-note">
@@ -425,6 +521,9 @@ export default function Chat({ profileId }: ChatProps) {
         <button className="chat-attach-btn" onClick={() => fileInputRef.current?.click()}>
           📷
         </button>
+        <button className="chat-gif-btn" onClick={() => setShowGifPicker(true)}>
+          GIF
+        </button>
         <button
           className={`chat-voice-btn ${isRecordingVoice ? 'recording' : ''}`}
           onClick={handleVoiceNote}
@@ -437,10 +536,15 @@ export default function Chat({ profileId }: ChatProps) {
           className="chat-input"
           placeholder="Type a message..."
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyPress={(e) => {
+          onChange={(e) => {
+            setInputText(e.target.value);
+            handleTyping();
+          }}
+          onBlur={handleStopTyping}
+          onKeyDown={(e) => {
             if (e.key === 'Enter') {
               sendMessage();
+              handleStopTyping();
             }
           }}
         />
@@ -448,6 +552,41 @@ export default function Chat({ profileId }: ChatProps) {
           ➤
         </button>
       </div>
+      {showReportModal && (
+        <ReportModal
+          isOpen={showReportModal}
+          profileName={profile?.name}
+          onSubmit={async (reason) => {
+            const uid = getCurrentUid();
+            if (uid && profileId) {
+              await createReport({
+                type: 'profile',
+                targetId: profileId,
+                targetName: profile?.name,
+                reason: reason || undefined,
+              });
+              showToast('User reported.', 'success');
+            }
+          }}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
+      {showGifPicker && (
+        <GifPicker
+          onSelect={async (gifUrl) => {
+            setShowGifPicker(false);
+            const uid = getCurrentUid();
+            if (!uid || !profileId || !matchId) return;
+            await sendChatMessage({
+              matchId,
+              senderId: uid,
+              gifUrl,
+              messageType: 'gif',
+            });
+          }}
+          onClose={() => setShowGifPicker(false)}
+        />
+      )}
       {showLinkUpModal && (
         <div className="modal-overlay" onClick={() => setShowLinkUpModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>

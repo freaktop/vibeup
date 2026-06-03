@@ -15,6 +15,10 @@ export interface FilterSettings {
   outTonightOnly?: boolean;
   verifiedOnly?: boolean;
   bodyType?: string[];
+  tribe?: string[];
+  relationshipStatus?: string[];
+  hivStatus?: string[];
+  sortBy?: 'smart' | 'recent';
 }
 
 interface FiltersProps {
@@ -46,10 +50,17 @@ export default function Filters({
     outTonightOnly: filters.outTonightOnly || false,
     verifiedOnly: filters.verifiedOnly || false,
     bodyType: filters.bodyType || [],
+    tribe: filters.tribe || [],
+    relationshipStatus: filters.relationshipStatus || [],
+    hivStatus: filters.hivStatus || [],
+    sortBy: filters.sortBy || 'smart',
   });
 
   const vibeOptions = ['Party', 'Chill', 'Romantic', 'Wild', 'Travel'];
   const bodyTypeOptions = ['Slim', 'Athletic', 'Average', 'Muscular', 'Bear', 'Dad bod'];
+  const tribeOptions = ['Bear', 'Otter', 'Jock', 'Twink', 'Daddy', 'Trans', 'Leather', 'Punk', 'Geek', 'Gym', 'Muscle', 'Chub', 'Skinny', 'Drag', 'Queer', 'Bi'];
+  const relationshipOptions = ['Single', 'Dating', 'Open relationship', 'Married', 'Polyamorous'];
+  const hivOptions = ['Negative', 'Positive', 'Undetectable', 'On PrEP'];
 
   if (!isOpen) return null;
 
@@ -81,6 +92,10 @@ export default function Filters({
       outTonightOnly: false,
       verifiedOnly: false,
       bodyType: [],
+      tribe: [],
+      relationshipStatus: [],
+      hivStatus: [],
+      sortBy: 'smart',
     };
     setLocalFilters(defaultFilters);
     storage.saveFilters({});
@@ -307,6 +322,95 @@ export default function Filters({
                 </label>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="filter-section">
+          <label className="filter-label">Tribe</label>
+          <div className="filter-interests">
+            {tribeOptions.map((t) => (
+              <button
+                key={t}
+                className={`filter-interest-tag ${localFilters.tribe?.includes(t) ? 'active' : ''}`}
+                onClick={() => {
+                  const current = localFilters.tribe || [];
+                  setLocalFilters(prev => ({
+                    ...prev,
+                    tribe: current.includes(t)
+                      ? current.filter(x => x !== t)
+                      : [...current, t],
+                  }));
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="filter-section">
+          <label className="filter-label">Relationship Status</label>
+          <div className="filter-checkboxes">
+            {relationshipOptions.map((rs) => (
+              <label key={rs} className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={localFilters.relationshipStatus?.includes(rs) || false}
+                  onChange={(e) => {
+                    const current = localFilters.relationshipStatus || [];
+                    setLocalFilters(prev => ({
+                      ...prev,
+                      relationshipStatus: e.target.checked
+                        ? [...current, rs]
+                        : current.filter(x => x !== rs),
+                    }));
+                  }}
+                />
+                <span>{rs}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="filter-section">
+          <label className="filter-label">HIV Status</label>
+          <div className="filter-checkboxes">
+            {hivOptions.map((hs) => (
+              <label key={hs} className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={localFilters.hivStatus?.includes(hs) || false}
+                  onChange={(e) => {
+                    const current = localFilters.hivStatus || [];
+                    setLocalFilters(prev => ({
+                      ...prev,
+                      hivStatus: e.target.checked
+                        ? [...current, hs]
+                        : current.filter(x => x !== hs),
+                    }));
+                  }}
+                />
+                <span>{hs}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="filter-section">
+          <label className="filter-label">Sort By</label>
+          <div className="filter-interests">
+            <button
+              className={`filter-interest-tag ${localFilters.sortBy === 'smart' ? 'active' : ''}`}
+              onClick={() => setLocalFilters(prev => ({ ...prev, sortBy: 'smart' }))}
+            >
+              Smart
+            </button>
+            <button
+              className={`filter-interest-tag ${localFilters.sortBy === 'recent' ? 'active' : ''}`}
+              onClick={() => setLocalFilters(prev => ({ ...prev, sortBy: 'recent' }))}
+            >
+              Recently Active
+            </button>
           </div>
         </div>
 

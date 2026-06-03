@@ -5,6 +5,33 @@ import { config } from '../config/api';
 import { trackEvent } from '../utils/telemetry';
 import './MapView.css';
 
+const THEME_STYLES: Record<string, any[] | undefined> = {
+  cruise: [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d47a1' }] },
+    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#1a237e' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#283593' }] },
+  ],
+  explore: [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1b5e20' }] },
+    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#2e7d32' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#388e3c' }] },
+  ],
+  sneaky: [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#b71c1c' }] },
+    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#c62828' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#d32f2f' }] },
+  ],
+  whosout: [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#4a148c' }] },
+    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#6a1b9a' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#7b1fa2' }] },
+  ],
+};
+
 interface MapViewProps {
   profiles: Profile[];
   onProfileClick: (profile: Profile) => void;
@@ -12,6 +39,7 @@ interface MapViewProps {
   centerLng?: number;
   zoom?: number;
   userLocation?: { latitude: number; longitude: number };
+  mapTheme?: 'cruise' | 'explore' | 'sneaky' | 'whosout' | 'default';
 }
 
 declare global {
@@ -28,6 +56,7 @@ export default function MapView({
   centerLng = -74.0060,
   zoom = 13,
   userLocation,
+  mapTheme,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<any>(null);
@@ -59,7 +88,7 @@ export default function MapView({
 
       // Load Google Maps script
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${config.googleMaps.apiKey}&callback=initMapCallback`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${config.googleMaps.apiKey}&callback=initMapCallback&libraries=marker&loading=async`;
       script.async = true;
       script.defer = true;
 
@@ -167,6 +196,15 @@ export default function MapView({
     }
   }, [centerLat, centerLng, zoom]); // Initialize when Google Maps is loaded
 
+  // Apply map theme styles
+  useEffect(() => {
+    if (!map.current || !window.google?.maps) return;
+    const styles = THEME_STYLES[mapTheme || ''] || [
+      { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    ];
+    map.current.setOptions({ styles });
+  }, [mapTheme]);
+
   // Update map center when it changes
   useEffect(() => {
     if (map.current) {
@@ -178,7 +216,6 @@ export default function MapView({
   // Update markers when profiles change
   useEffect(() => {
     if (!map.current || !window.google || !window.google.maps) {
-      // Map not initialized yet, wait for it
       return;
     }
 
@@ -189,94 +226,164 @@ export default function MapView({
         // Remove existing markers
         markers.current.forEach(marker => {
           try {
-            marker.setMap(null);
+            if (typeof marker.setMap === 'function') {
+              marker.setMap(null);
+            } else {
+              marker.map = null;
+            }
           } catch (e) {
             // Marker already removed, ignore
           }
         });
         markers.current = [];
 
+        // Add "You" marker for current user location
+        if (userLocation) {
+          try {
+            const youEl = document.createElement('div');
+            youEl.style.width = '16px';
+            youEl.style.height = '16px';
+            youEl.style.borderRadius = '50%';
+            youEl.style.background = '#3b82f6';
+            youEl.style.border = '3px solid #fff';
+            youEl.style.boxShadow = '0 0 8px rgba(59,130,246,0.6), 0 0 0 4px rgba(59,130,246,0.2)';
+            youEl.style.position = 'relative';
+
+            const youMarker = new window.google.maps.Marker({
+              position: { lat: userLocation.latitude, lng: userLocation.longitude },
+              map: map.current,
+              title: 'You',
+              icon: {
+                path: window.google.maps.SymbolPath.CIRCLE,
+                scale: 8,
+                fillColor: '#3b82f6',
+                fillOpacity: 1,
+                strokeColor: '#fff',
+                strokeWeight: 3,
+              },
+              zIndex: 9999,
+            });
+            markers.current.push(youMarker);
+          } catch (e) {
+            console.error('Error creating you marker:', e);
+          }
+        }
+
         // Add markers for each profile
         profiles.forEach((profile) => {
           if (!profile.lat || !profile.lng || !map.current) return;
 
           try {
-            const photoUrl = profile.photo || profile.photos?.[0] || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop';
+            const photoUrl = profile.photo || profile.photos?.[0] || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'User')}&background=ff2d95&color=fff&size=48&rounded=true&bold=true`;
             const profileName = profile.name ?? 'User';
             const profileAge = profile.age ?? '';
 
-            // Create custom marker element - profile pic as circular marker
+            // Create distance label element
+            const distanceLabel = document.createElement('div');
+            const dist = profile.distance !== undefined ? `${profile.distance}mi` : '';
+            distanceLabel.textContent = dist;
+            distanceLabel.style.color = '#fff';
+            distanceLabel.style.fontSize = '10px';
+            distanceLabel.style.fontWeight = '600';
+            distanceLabel.style.textAlign = 'center';
+            distanceLabel.style.textShadow = '0 1px 3px rgba(0,0,0,0.8)';
+            distanceLabel.style.marginTop = '2px';
+            distanceLabel.style.lineHeight = '1';
+
+            // Container for marker + label
+            const container = document.createElement('div');
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.alignItems = 'center';
+            container.style.cursor = 'pointer';
+
+            // Create custom marker element - tiny circular profile pic
             const el = document.createElement('div');
             el.className = 'google-maps-marker';
-            el.style.width = '44px';
-            el.style.height = '44px';
+            el.style.width = '24px';
+            el.style.height = '24px';
             el.style.borderRadius = '50%';
             el.style.backgroundImage = `url(${photoUrl})`;
             el.style.backgroundSize = 'cover';
             el.style.backgroundPosition = 'center';
-            el.style.border = '3px solid #FF6B9D';
-            el.style.cursor = 'pointer';
-            el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+            el.style.border = '2px solid #FF6B9D';
+            el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.4)';
             el.style.position = 'relative';
+            el.style.flexShrink = '0';
 
-            // Add going out badge
+            // Add going out badge (small dot)
             if (profile.goingOutTonight) {
-              const badge = document.createElement('div');
-              badge.innerHTML = '🌙';
-              badge.style.position = 'absolute';
-              badge.style.top = '-5px';
-              badge.style.right = '-5px';
-              badge.style.fontSize = '16px';
-              badge.style.background = '#7c3aed';
-              badge.style.borderRadius = '50%';
-              badge.style.width = '20px';
-              badge.style.height = '20px';
-              badge.style.display = 'flex';
-              badge.style.alignItems = 'center';
-              badge.style.justifyContent = 'center';
-              badge.style.zIndex = '1000';
-              el.appendChild(badge);
+              el.style.borderColor = '#7c3aed';
+              const dot = document.createElement('div');
+              dot.style.position = 'absolute';
+              dot.style.top = '-2px';
+              dot.style.right = '-2px';
+              dot.style.width = '8px';
+              dot.style.height = '8px';
+              dot.style.borderRadius = '50%';
+              dot.style.background = '#7c3aed';
+              dot.style.border = '1.5px solid #0a0a0f';
+              dot.style.zIndex = '1000';
+              el.appendChild(dot);
             } else if (profile.hookUpNow) {
-              const badge = document.createElement('div');
-              badge.innerHTML = '🔥';
-              badge.style.position = 'absolute';
-              badge.style.top = '-5px';
-              badge.style.right = '-5px';
-              badge.style.fontSize = '16px';
-              badge.style.background = '#FF6B9D';
-              badge.style.borderRadius = '50%';
-              badge.style.width = '20px';
-              badge.style.height = '20px';
-              badge.style.display = 'flex';
-              badge.style.alignItems = 'center';
-              badge.style.justifyContent = 'center';
-              badge.style.zIndex = '1000';
-              el.appendChild(badge);
+              el.style.borderColor = '#ff4444';
+              const dot = document.createElement('div');
+              dot.style.position = 'absolute';
+              dot.style.top = '-2px';
+              dot.style.right = '-2px';
+              dot.style.width = '8px';
+              dot.style.height = '8px';
+              dot.style.borderRadius = '50%';
+              dot.style.background = '#ff4444';
+              dot.style.border = '1.5px solid #0a0a0f';
+              dot.style.zIndex = '1000';
+              el.appendChild(dot);
             }
 
-            // Create marker
-            const marker = new window.google.maps.Marker({
-              position: { lat: profile.lat, lng: profile.lng },
-              map: map.current,
-              title: `${profileName}${profileAge ? ', ' + profileAge : ''}`,
-              icon: {
-                url: photoUrl,
-                scaledSize: new window.google.maps.Size(44, 44),
-                anchor: new window.google.maps.Point(22, 22),
-              },
-            });
+            container.appendChild(el);
+            container.appendChild(distanceLabel);
 
-            // Add click handler
-            marker.addListener('click', () => {
-              try {
-                setSelectedProfile(profile);
-                onProfileClick(profile);
-              } catch (error) {
-                console.error('Error handling profile click:', error);
-              }
-            });
-
-            markers.current.push(marker);
+            // Create marker with AdvancedMarkerElement (supports custom HTML content)
+            const useAdvanced = !!window.google.maps.marker?.AdvancedMarkerElement;
+            if (useAdvanced) {
+              const marker = new window.google.maps.marker.AdvancedMarkerElement({
+                position: { lat: profile.lat, lng: profile.lng },
+                map: map.current,
+                title: `${profileName}${profileAge ? ', ' + profileAge : ''}${dist ? ' · ' + dist : ''}`,
+                content: container,
+              });
+              marker.addListener('click', () => {
+                try {
+                  setSelectedProfile(profile);
+                  onProfileClick(profile);
+                } catch (error) {
+                  console.error('Error handling profile click:', error);
+                }
+              });
+              markers.current.push(marker);
+            } else {
+              // Fallback for browsers without AdvancedMarkerElement
+              const marker = new window.google.maps.Marker({
+                position: { lat: profile.lat, lng: profile.lng },
+                map: map.current,
+                title: `${profileName}${profileAge ? ', ' + profileAge : ''}${dist ? ' · ' + dist : ''}`,
+                icon: {
+                  url: photoUrl,
+                  scaledSize: new window.google.maps.Size(24, 24),
+                  anchor: new window.google.maps.Point(12, 12),
+                  shape: { type: 'circle', coords: [12, 12, 12] },
+                },
+              });
+              marker.addListener('click', () => {
+                try {
+                  setSelectedProfile(profile);
+                  onProfileClick(profile);
+                } catch (error) {
+                  console.error('Error handling profile click:', error);
+                }
+              });
+              markers.current.push(marker);
+            }
           } catch (error) {
             console.error('Error creating marker for profile:', profile.id, error);
           }
@@ -381,15 +488,20 @@ export default function MapView({
     <div className="map-view-container">
       <div ref={mapContainer} className="google-maps-map" style={{ width: '100%', height: '100%' }} />
       {selectedProfile && (
-        <div className="map-profile-preview">
+        <div className="map-profile-preview" onClick={() => onProfileClick(selectedProfile)}>
           <SafeImage src={selectedProfile.photo} alt={selectedProfile.name} className="preview-avatar" />
           <div className="preview-info">
             <div className="preview-name">{selectedProfile.name}, {selectedProfile.age}</div>
-            <div className="preview-distance">{selectedProfile.distance} mi away</div>
+            {selectedProfile.online && <div className="preview-online">● Online now</div>}
+            <div className="preview-distance">{selectedProfile.distance !== undefined ? `${selectedProfile.distance} mi` : 'Nearby'}</div>
             {selectedProfile.hookUpNow && (
               <div className="preview-hookup">🔥 Available Now</div>
             )}
+            {selectedProfile.goingOutTonight && (
+              <div className="preview-outtonight">🌙 Out Tonight</div>
+            )}
           </div>
+          <button className="preview-chat-btn" onClick={(e) => { e.stopPropagation(); onProfileClick(selectedProfile); }}>→</button>
         </div>
       )}
     </div>

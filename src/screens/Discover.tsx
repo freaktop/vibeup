@@ -20,11 +20,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getCurrentUid } from '../auth';
 import { createReport, followUser, listenMySwipes, listenProfiles, listenUserFollows, recordProfileView, removeSwipe, setSwipe, unfollowUser, unmatch } from '../firestore';
-import { enrichProfilesWithDistance } from '../utils/geolocation';
+import { enrichProfilesWithDistance, getCityCoords } from '../utils/geolocation';
 import { normalizeProfile } from '../utils/normalizeProfile';
+import { usCities } from '../data/cities';
 import './Discover.css';
 
-type IntentFilter = 'hookup' | 'date' | 'goingout';
+type IntentFilter = 'hookup' | 'date' | 'goingout' | 'favorites';
 type ViewMode = 'grid' | 'card';
 
 export default function Discover() {
@@ -62,6 +63,9 @@ export default function Discover() {
   const [hasSwiped, setHasSwiped] = useState(false);
   const [blockedProfiles, setBlockedProfiles] = useState<string[]>([]);
   const [followingIds, setFollowingIds] = useState<string[]>([]);
+  const [exploreCity, setExploreCity] = useState<string | null>(null);
+  const [showCityExploreModal, setShowCityExploreModal] = useState(false);
+  const [cityExploreSearch, setCityExploreSearch] = useState('');
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [actionProfileId, setActionProfileId] = useState<string | null>(null);
@@ -81,6 +85,10 @@ export default function Discover() {
     outTonightOnly: false,
     verifiedOnly: false,
     bodyType: [],
+    tribe: [],
+    relationshipStatus: [],
+    hivStatus: [],
+    sortBy: 'smart',
   });
 
   // Load ProfileDetailModal dynamically when a profile is selected (avoids "ProfileDetailModal is not defined" with lazy-loaded Discover)
@@ -110,6 +118,10 @@ export default function Discover() {
       outTonightOnly: savedFilters?.outTonightOnly || false,
       verifiedOnly: savedFilters?.verifiedOnly || false,
       bodyType: savedFilters?.bodyType || [],
+      tribe: savedFilters?.tribe || [],
+      relationshipStatus: savedFilters?.relationshipStatus || [],
+      hivStatus: savedFilters?.hivStatus || [],
+      sortBy: savedFilters?.sortBy || 'smart',
     };
     setFilters(defaultFilters);
     storage.saveFilters(defaultFilters);
@@ -220,7 +232,7 @@ export default function Discover() {
     if (profiles.length > 0) {
       applyFilters();
     }
-  }, [profiles, filters, passedProfiles, blockedProfiles, intentFilter]);
+  }, [profiles, filters, passedProfiles, blockedProfiles, intentFilter, exploreCity, savedProfiles]);
 
   useEffect(() => {
     if (viewMode === 'card' && profilesToShowRef.current.length > 0 && currentIndex >= profilesToShowRef.current.length) {
@@ -239,7 +251,22 @@ export default function Discover() {
       !passedProfiles.includes(profile.id) && !blockedProfiles.includes(profile.id)
     );
 
-    // Intent filter: Hookup | Date | Going Out (prioritize matching, fallback to all)
+    // Explore mode: filter to a specific city area
+    if (exploreCity) {
+      const cityCoords = getCityCoords(exploreCity);
+      if (cityCoords) {
+        filtered = filtered.filter(p => {
+          if (p.lat && p.lng) {
+            const dlat = Math.abs(p.lat - cityCoords.lat);
+            const dlng = Math.abs(p.lng - cityCoords.lng);
+            return dlat < 1.0 && dlng < 1.0; // ~50mi radius
+          }
+          return false;
+        });
+      }
+    }
+
+    // Intent filter: Hookup | Date | Going Out | Favorites (prioritize matching, fallback to all)
     const intentFiltered = (() => {
       switch (intentFilter) {
         case 'hookup':
@@ -251,6 +278,8 @@ export default function Discover() {
         case 'goingout':
           const out = filtered.filter(p => p.goingOutTonight || (p.lookingFor && p.lookingFor.some(lf => ['Friends', 'Clubbing'].includes(lf))) || p.tonightLookingFor === 'Going Out' || p.tonightLookingFor === 'Clubbing');
           return out.length > 0 ? out : filtered;
+        case 'favorites':
+          return filtered.filter(p => savedProfiles.includes(p.id));
         default:
           return filtered;
       }
@@ -323,21 +352,54 @@ export default function Discover() {
       );
     }
 
-    // Smart sort: online first, going out boosted, premium boosted
-    filtered.sort((a, b) => {
-      let scoreA = 0, scoreB = 0;
-      if (a.online) scoreA += 100;
-      if (b.online) scoreB += 100;
-      if (a.goingOutTonight) scoreA += 50;
-      if (b.goingOutTonight) scoreB += 50;
-      if (a.verified) scoreA += 20;
-      if (b.verified) scoreB += 20;
-      const distA = a.distance ?? 999;
-      const distB = b.distance ?? 999;
-      scoreA -= distA;
-      scoreB -= distB;
-      return scoreB - scoreA;
-    });
+    // Tribe filter
+    if (filters.tribe && filters.tribe.length > 0) {
+      filtered = filtered.filter(profile =>
+        profile.tribe && filters.tribe!.includes(profile.tribe)
+      );
+    }
+
+    // Relationship status filter
+    if (filters.relationshipStatus && filters.relationshipStatus.length > 0) {
+      filtered = filtered.filter(profile =>
+        profile.relationshipStatus && filters.relationshipStatus!.includes(profile.relationshipStatus)
+      );
+    }
+
+    // HIV status filter
+    if (filters.hivStatus && filters.hivStatus.length > 0) {
+      filtered = filtered.filter(profile =>
+        profile.hivStatus && filters.hivStatus!.includes(profile.hivStatus)
+      );
+    }
+
+    // Sort: Smart or Recently Active
+    if (filters.sortBy === 'recent') {
+      filtered.sort((a, b) => {
+        const lastA = a.lastActive ?? 0;
+        const lastB = b.lastActive ?? 0;
+        return lastB - lastA;
+      });
+    } else {
+      // Smart sort: online first, boosted, going out, verified, distance
+      const now = Date.now();
+      filtered.sort((a, b) => {
+        let scoreA = 0, scoreB = 0;
+        if (a.online) scoreA += 100;
+        if (b.online) scoreB += 100;
+        if (a.boostExpiresAt && a.boostExpiresAt > now) scoreA += 200;
+        if (b.boostExpiresAt && b.boostExpiresAt > now) scoreB += 200;
+        if (a.goingOutTonight) scoreA += 50;
+        if (b.goingOutTonight) scoreB += 50;
+        if (a.verified) scoreA += 20;
+        if (b.verified) scoreB += 20;
+        const distA = a.distance ?? 999;
+        const distB = b.distance ?? 999;
+        scoreA -= distA;
+        scoreB -= distB;
+        return scoreB - scoreA;
+      });
+    }
 
     setFilteredProfiles(filtered);
     if (currentIndex >= filtered.length) {
@@ -617,6 +679,38 @@ export default function Discover() {
         boostsRemaining: 999,
         superLikesRemaining: 999,
         undosRemaining: 999,
+        canSeeViewers: true,
+        canJoinExclusiveCommunities: true,
+      };
+    } else if (feature === 'premier') {
+      updated = {
+        ...updated,
+        hasPremium: true,
+        hasPremier: true,
+        hasBoost: true,
+        hasSuperLike: true,
+        hasUndo: true,
+        boostsRemaining: 999,
+        superLikesRemaining: 999,
+        undosRemaining: 999,
+        canSeeViewers: true,
+        canJoinExclusiveCommunities: true,
+      };
+    } else if (feature === 'elite') {
+      updated = {
+        ...updated,
+        hasPremium: true,
+        hasPremier: true,
+        hasElite: true,
+        hasBoost: true,
+        hasSuperLike: true,
+        hasUndo: true,
+        boostsRemaining: 999,
+        superLikesRemaining: 999,
+        undosRemaining: 999,
+        canSeeViewers: true,
+        canJoinExclusiveCommunities: true,
+        verifiedBadge: true,
       };
     } else if (feature === 'superlike') {
       updated.superLikesRemaining += 5;
@@ -647,6 +741,10 @@ export default function Discover() {
       outTonightOnly: false,
       verifiedOnly: false,
       bodyType: [],
+      tribe: [],
+      relationshipStatus: [],
+      hivStatus: [],
+      sortBy: 'smart',
     };
     setFilters(defaultFilters);
     storage.saveFilters(defaultFilters);
@@ -814,11 +912,6 @@ export default function Discover() {
           />
         )}
         {/* Header */}
-        <div className="discover-header-text">
-          <h1 className="discover-title">Hook up. Date. Go out.</h1>
-          <p className="discover-helper-text">All in one vibe. Real-time, proximity-based.</p>
-        </div>
-
         {/* Intent filter */}
         <div className="discover-subtabs">
           <button
@@ -839,8 +932,19 @@ export default function Discover() {
           >
             Going Out Tonight
           </button>
+          <button
+            className={`discover-subtab ${intentFilter === 'favorites' ? 'active' : ''}`}
+            onClick={() => setIntentFilter('favorites')}
+          >
+            ❤️ Saved
+          </button>
         </div>
 
+        {exploreCity && (
+          <div className="explore-banner" onClick={() => { setExploreCity(null); }}>
+            ✈️ Exploring {exploreCity} <span className="explore-banner-dismiss">✕</span>
+          </div>
+        )}
         {/* Header actions */}
         <div className="discover-header-actions">
           <div className="discover-actions-left">
@@ -850,6 +954,9 @@ export default function Discover() {
               </button>
             )}
           </div>
+          <button className="filters-button" onClick={() => setShowCityExploreModal(true)} title={exploreCity ? `Exploring ${exploreCity}` : 'Travel to city'}>
+            ✈️ {exploreCity ? 'Travel' : 'Explore'}
+          </button>
           <button
             className="view-toggle-button"
             onClick={() => {
@@ -876,7 +983,7 @@ export default function Discover() {
               onClick={() => handleProfileClick(profile)}
             >
               <div className="grid-item-image-container">
-                <SafeImage src={profile.photo} alt={profile.name} className="grid-item-image" />
+                <SafeImage src={profile.photo} alt={profile.name} className="grid-item-image" blurred={!!profile.photoBlurEnabled} />
                 {profile.online && (
                   <div className="grid-item-online" title="Online now">●</div>
                 )}
@@ -893,51 +1000,9 @@ export default function Discover() {
                   <div className="grid-item-liked">✓</div>
                 )}
               </div>
-              <div className="grid-item-info">
+              <div className="grid-item-overlay">
                 <div className="grid-item-name">{profile.name}, {profile.age}</div>
                 <div className="grid-item-distance">{profile.distance !== undefined ? `${profile.distance} mi` : 'Nearby'}</div>
-                {(profile.vibeType || profile.lookingFor?.length) ? (
-                  <div className="grid-item-tags">
-                    {profile.vibeType || profile.lookingFor?.slice(0, 2).join(' • ')}
-                  </div>
-                ) : null}
-              </div>
-              <div className="grid-item-actions">
-                <button
-                  className="grid-action-btn like-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleLike(profile.id);
-                  }}
-                  title="Like"
-                >
-                  ❤️
-                </button>
-                <button
-                  className="grid-action-btn message-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleMessage(profile.id);
-                  }}
-                  title="Message"
-                  disabled={!likedProfiles.includes(profile.id)}
-                >
-                  💬
-                </button>
-                <button
-                  className="grid-action-btn invite-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (likedProfiles.includes(profile.id)) {
-                      window.dispatchEvent(new CustomEvent('openChat', { detail: { profileId: profile.id } }));
-                    } else {
-                      showToast('Like first to invite out', 'info');
-                    }
-                  }}
-                  title="Invite Out"
-                >
-                  🎉
-                </button>
               </div>
             </div>
           ))}
@@ -963,6 +1028,40 @@ export default function Discover() {
           availableKinks={allKinks}
           availableLookingFor={allLookingFor}
         />
+
+        {showCityExploreModal && (
+          <div className="city-modal-overlay" onClick={() => setShowCityExploreModal(false)}>
+            <div className="city-modal-content" onClick={(e) => e.stopPropagation()}>
+              <h3>Explore City</h3>
+              <input
+                className="city-modal-input"
+                value={cityExploreSearch}
+                onChange={(e) => setCityExploreSearch(e.target.value)}
+                placeholder="Search city..."
+                autoFocus
+              />
+              <div className="city-modal-list">
+                <button className="city-modal-item" onClick={() => { setExploreCity(null); setShowCityExploreModal(false); }}>
+                  📍 My Location
+                </button>
+                {usCities
+                  .map((c) => `${c.name}, ${c.state}`)
+                  .filter((c) => c.toLowerCase().includes(cityExploreSearch.toLowerCase()))
+                  .slice(0, 30)
+                  .map((cityLabel) => (
+                    <button
+                      key={cityLabel}
+                      className={`city-modal-item ${exploreCity === cityLabel ? 'active' : ''}`}
+                      onClick={() => { setExploreCity(cityLabel); setShowCityExploreModal(false); }}
+                    >
+                      {cityLabel}
+                    </button>
+                  ))}
+              </div>
+              <button className="city-modal-close" onClick={() => setShowCityExploreModal(false)}>Close</button>
+            </div>
+          </div>
+        )}
 
         <PremiumModal
           isOpen={showPremiumModal}
